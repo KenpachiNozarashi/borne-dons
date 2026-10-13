@@ -6,7 +6,9 @@
 /// 2. SharedPreferences & SecureStorage inside StorageService to load state
 /// 3. Evaluates if the POS is ready for transactions (has keys & reader credentials)
 /// 4. Boots either the Setup Screen or Checkout Payment Screen based on setup status.
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'services/logo_runtime.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'services/storage_service.dart';
@@ -17,6 +19,7 @@ import 'features/payment/payment_screen.dart';
 void main() async {
   // Ensure that Flutter widget interactions are fully bound and ready before async loading
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(startLocalLogoService());
 
   StorageService? storage;
   SumupService sumupService = new SumupService();
@@ -35,7 +38,9 @@ void main() async {
   // Run application with custom, Shadcn-style minimalist theme settings
   runApp(StripePOSApp(
     storageService: storage,
-    initialScreen: isTerminalConfigured
+    initialScreen: storage == null
+        ? const SizedBox.shrink()
+        : isTerminalConfigured
         ? PaymentScreen(storageService: storage!, sumupService: sumupService)
         : SetupScreen(storageService: storage!, sumupService: sumupService),
   ));

@@ -4,8 +4,8 @@ Ces fichiers doivent être validés sur la machine cible avant tout encaissement
 
 ## Windows 11 — PC Intel / AMD 64 bits
 
-Extraire toute l’archive dans un dossier permanent, puis ouvrir `Lancer-borne.cmd`.
-Conserver les dossiers `app` et `logo-service` à côté du lanceur.
+Extraire toute l’archive dans un dossier permanent, puis ouvrir directement `borne_dons.exe`.
+Conserver le dossier `logo-service`, les DLL et le dossier `data` à côté de l’exécutable.
 Le runtime Microsoft Visual C++ 2015–2022 x64 peut être nécessaire.
 
 ## Ubuntu — PC Intel / AMD 64 bits
@@ -21,11 +21,11 @@ Une session graphique et un trousseau de clés disponible sont nécessaires.
 Extraire toute l’archive, puis lancer :
 
 ```sh
-chmod +x lancer-borne.sh app/borne_dons logo-service/logo-service
-./lancer-borne.sh
+chmod +x borne_dons logo-service/logo-service
+./borne_dons
 ```
 
-Le lancement démarre le service de détourage local et l’application native Flutter.
+L’application démarre automatiquement le service de détourage local. Aucun lanceur séparé n’est nécessaire.
 Le modèle de détourage est inclus dans les archives produites ; aucun téléchargement
 supplémentaire n’est nécessaire pour détourer les logos sur place.
 
@@ -45,3 +45,5 @@ L’accès caché évite les ouvertures accidentelles ; il n’est pas une authe
 Fermer l’application et le service de détourage, puis remplacer le dossier de distribution.
 Les réglages sont stockés sur la machine, en dehors du dossier de l’application.
 Ne pas effacer le profil utilisateur ou son trousseau de clés.
+
+Le verset et sa traduction sont intégrés comme valeurs par défaut. Les textes déjà enregistrés restent prioritaires pour préserver la personnalisation.
