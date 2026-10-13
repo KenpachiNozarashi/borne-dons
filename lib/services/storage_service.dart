@@ -5,6 +5,8 @@
 /// - shared_preferences for non-sensitive configurations (like the stored logo path).
 /// - path_provider & dart:io to copy and persist the custom logo file locally.
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -45,6 +47,12 @@ class StorageService {
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
     );
     final prefs = await SharedPreferences.getInstance();
+    // Adopt the new grey default once, including previously saved preview colours.
+    // Later choices made in the colour picker remain saved normally.
+    if (prefs.getBool('grey_theme_default_applied') != true) {
+      await prefs.setInt(_keyBrandColor, 0xFFEDEDED);
+      await prefs.setBool('grey_theme_default_applied', true);
+    }
     return StorageService(secureStorage: secureStorage, prefs: prefs);
   }
 
@@ -132,6 +140,45 @@ class StorageService {
 
   // --- Company Logo Operations ---
 
+  Uint8List? getLogoBytes() {
+    final encoded = _prefs.getString('company_logo_bytes');
+    return encoded == null ? null : base64Decode(encoded);
+  }
+
+  Future<void> saveLogoBytes(Uint8List bytes) async {
+    await _prefs.setString('company_logo_bytes', base64Encode(bytes));
+    await _prefs.remove(_keyLogoPath);
+  }
+
+  int getDonationButtonColor(bool custom) => _prefs.getInt(custom ? 'custom_button_color' : 'amount_buttons_color') ??
+      (custom ? 0xFF757479 : 0xFFC9A55C);
+
+  Future<void> setDonationButtonColor(bool custom, int value) async {
+    await _prefs.setInt(custom ? 'custom_button_color' : 'amount_buttons_color', value);
+  }
+
+  int getTextColor(String section) => _prefs.getInt('text_${section}_color') ??
+      (section == 'main' ? 0xFFC9A55C : 0xFF757479);
+
+  double getTextSize(String section) => _prefs.getDouble('text_${section}_size') ??
+      (section == 'main' ? 36 : section == 'translation' ? 24 : 40);
+
+  String getTextFont(String section) => _prefs.getString('text_${section}_font') ??
+      (section == 'main' ? 'Amiri' : 'ReemKufi');
+
+  Future<void> setTextAppearance(String section, int color, double size, String font) async {
+    await _prefs.setInt('text_${section}_color', color);
+    await _prefs.setDouble('text_${section}_size', size);
+    await _prefs.setString('text_${section}_font', font);
+  }
+
+  String getTranslationText() => _prefs.getString('translation_text') ??
+      '« Si vous faites à Allah un prêt sincère, Il le multipliera pour vous et vous pardonnera. Allah cependant est très Reconnaissant et Indulgent. » [At-Taghaabun : 17]';
+
+  Future<void> setTranslationText(String value) async {
+    await _prefs.setString('translation_text', value);
+  }
+
   /// Reads the saved company logo local file path.
   String? getLogoPath() {
     return _prefs.getString(_keyLogoPath);
@@ -159,6 +206,7 @@ class StorageService {
 
   /// Clears the saved logo path from memory.
   Future<void> clearLogo() async {
+    await _prefs.remove('company_logo_bytes');
     await _prefs.remove(_keyLogoPath);
   }
 
@@ -206,7 +254,7 @@ class StorageService {
   /// Gets the stored short text for calls to action, with default.
   String getShortText() {
     return _prefs.getString(_keyShortText) ?? 
-        'Soutenez notre association. Chaque contribution fait la différence.';
+        'إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ';
   }
 
   /// Sets the stored short text for calls to action.
@@ -235,6 +283,8 @@ class StorageService {
 
   /// Clears all local configurations to support re-entering setup details.
   Future<void> resetAll() async {
+    await clearLogo();
+    await _prefs.remove('translation_text');
     await _secureStorage.delete(key: _keyStripeSecret);
     await _secureStorage.delete(key: _keyTerminalId);
     await _prefs.remove(_keyLogoPath);

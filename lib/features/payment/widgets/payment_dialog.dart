@@ -4,19 +4,25 @@
 /// It uses a stream of logs/messages to show the user and merchant the reader handshake status.
 /// It includes visual indicators (using elegant CustomPainters for loading pulses and green approvals)
 /// with a structural option to swap in Lottie JSON assets for production.
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/constants.dart';
+import 'amount_grid.dart';
 
 class PaymentDialog extends StatefulWidget {
   final double amount;
+  final Color neutralButtonColor;
   final Future<Map<String, dynamic>> paymentFuture;
   final Stream<String> statusStream;
+  final VoidCallback? onApproved;
 
   const PaymentDialog({
     Key? key,
     required this.amount,
+    this.neutralButtonColor = const Color(0xFF757479),
     required this.paymentFuture,
     required this.statusStream,
+    this.onApproved,
   }) : super(key: key);
 
   @override
@@ -27,8 +33,10 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
   late AnimationController _pulseController;
   late AnimationController _checkController;
   
+  StreamSubscription<String>? _statusSubscription;
   String _latestStatus = 'Initialisation du terminal...';
   bool _isSuccess = false;
+  bool _isConfirmed = false;
   bool _isError = false;
   String _errorMessage = '';
 
@@ -49,7 +57,7 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
     );
 
     // Subscribe to status updates from the Stripe API
-    widget.statusStream.listen((status) {
+    _statusSubscription = widget.statusStream.listen((status) {
       if (mounted) {
         setState(() {
           _latestStatus = status;
@@ -63,13 +71,15 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
       if (result['success'] == true) {
         setState(() {
           _isSuccess = true;
+          _isConfirmed = result['payment_confirmed'] != false;
         });
+        if (_isConfirmed) widget.onApproved?.call();
         _pulseController.stop();
         _checkController.forward();
         // Delay and auto-dismiss on success
-        Future.delayed(const Duration(seconds: 2), () {
+        Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
-            Navigator.of(context).pop(true); // Return success
+            Navigator.of(context).pop(_isConfirmed); // Return confirmed success
           }
         });
       } else {
@@ -84,6 +94,7 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
 
   @override
   void dispose() {
+    _statusSubscription?.cancel();
     _pulseController.dispose();
     _checkController.dispose();
     super.dispose();
@@ -93,8 +104,8 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
   Widget build(BuildContext context) {
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -111,27 +122,42 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
 
               // --- Charge Details ---
               Text(
-                _isSuccess ? 'Paiement approuvé' : (_isError ? 'Paiement refusé' : 'Terminal Charge'),
-                style: const TextStyle(
-                  fontSize: 18,
+                _isSuccess ? (_isConfirmed ? 'Merci pour votre don !' : 'Paiement autorisé') : (_isError ? 'Paiement refusé' : 'Paiement en cours'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'ReemKufi',
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.5,
-                  color: AppConstants.foreground,
+                  color: _isConfirmed ? const Color(0xFFC9A55C) : AppConstants.foreground,
                 ),
               ),
               const SizedBox(height: 4.0),
               Text(
                 '${widget.amount.toStringAsFixed(2)} EUR',
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 40,
                   fontWeight: FontWeight.w800,
                   color: AppConstants.foreground,
                 ),
               ),
               const SizedBox(height: 20.0),
 
+              if (_isConfirmed) ...[
+                const Text('جَزَاكُمْ اللَّهُ خَيْرًا',
+                  textDirection: TextDirection.rtl, textAlign: TextAlign.center,
+                  style: TextStyle(fontFamily: 'ScheherazadeNew', fontSize: 44, fontWeight: FontWeight.normal,
+                    color: Color(0xFFC9A55C), height: 1.5)),
+                const SizedBox(height: 20),
+                const Text('Votre paiement a bien été validé.', textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24)),
+                const SizedBox(height: 24),
+                SizedBox(width: 200, height: 72,
+                  child: DonationButton(label: 'Quitter', grey: true, baseColor: widget.neutralButtonColor, fontSize: 24, subtle: true,
+                    onTap: () => Navigator.of(context).pop(true))),
+              ],
               // --- Logs Console / Status Messages ---
-              Container(
+              if (!_isConfirmed) Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
@@ -143,9 +169,9 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'TERMINAL LOG',
+                      'ÉTAT DU PAIEMENT',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.0,
                         color: AppConstants.mutedForeground,
@@ -156,7 +182,7 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
                       _isError ? _errorMessage : _latestStatus,
                       style: TextStyle(
                         fontFamily: 'monospace',
-                        fontSize: 12,
+                        fontSize: 20,
                         color: _isError ? AppConstants.error : AppConstants.foreground,
                         height: 1.4,
                       ),
@@ -175,7 +201,7 @@ class _PaymentDialogState extends State<PaymentDialog> with TickerProviderStateM
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppConstants.border),
                     ),
-                    child: const Text('Annulation & Clôture'),
+                    child: const Text('Fermer', style: TextStyle(fontSize: 20)),
                   ),
                 ),
               ],

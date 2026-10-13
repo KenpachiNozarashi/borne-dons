@@ -8,10 +8,12 @@
 /// All configurations are saved securely via StorageService, and the user is routed
 /// to the checkout dashboard.
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants.dart';
 import '../../services/storage_service.dart';
+import '../../services/logo_service.dart';
 import '../../services/sumup_service.dart';
 import '../payment/payment_screen.dart';
 import '../colorpicker/colorpicker_dialog.dart';
@@ -43,12 +45,21 @@ class _SetupScreenState extends State<SetupScreen> {
   final _associationNameController = TextEditingController();
   final _shortTextController = TextEditingController();
   
-  File? _logoFile;
+  Uint8List? _logoBytes;
+  Uint8List? _originalLogoBytes;
+  bool _isRemovingBackground = false;
+  final _logoService = LogoService();
+  final _translationController = TextEditingController();
   bool _isMockMode = false;
   bool _isTestMode = false;
   bool _isStripe = false;
   bool _isLoading = false;
-  Color? _brandColor;
+  Color _amountButtonColor = const Color(0xFFC9A55C);
+  Color _customButtonColor = const Color(0xFF757479);
+  final Map<String, Color> _textColors = {};
+  final Map<String, double> _textSizes = {};
+  final Map<String, String> _textFonts = {};
+  Color? _brandColor = const Color(0xFFEDEDED);
 
   @override
   void initState() {
@@ -66,6 +77,11 @@ class _SetupScreenState extends State<SetupScreen> {
     final secret = await widget.storageService.getStripeSecretKey();
     final terminal = await widget.storageService.getTerminalId();
     final logoPath = widget.storageService.getLogoPath();
+    var logoBytes = widget.storageService.getLogoBytes();
+    if (logoBytes == null && !kIsWeb && logoPath != null) {
+      try { logoBytes = await File(logoPath).readAsBytes(); } catch (_) {}
+    }
+    if (!mounted) return;
     final isMock = widget.storageService.isMockMode();
     final isTest = widget.storageService.isTestMode();
     final isStripe = widget.storageService.isStripe();
@@ -82,29 +98,108 @@ class _SetupScreenState extends State<SetupScreen> {
       _terminalIdController.text = terminal ?? '';
       _associationNameController.text = associationName;
       _shortTextController.text = shortText;
+      _translationController.text = widget.storageService.getTranslationText();
       _isMockMode = isMock;
       _isTestMode = isTest;
       _isStripe = isStripe;
-      _brandColor = widget.storageService.getBrandColor() == null ?Color.fromARGB(255, 115, 176, 245) : Color(widget.storageService.getBrandColor()!);
-      if (logoPath != null && logoPath.isNotEmpty) {
-        _logoFile = File(logoPath);
+      _brandColor = widget.storageService.getBrandColor() == null ?const Color(0xFFEDEDED) : Color(widget.storageService.getBrandColor()!);
+      _logoBytes = logoBytes;
+      _amountButtonColor = Color(widget.storageService.getDonationButtonColor(false));
+      _customButtonColor = Color(widget.storageService.getDonationButtonColor(true));
+      for (final section in ['main', 'translation', 'association']) {
+        _textColors[section] = Color(widget.storageService.getTextColor(section));
+        _textSizes[section] = widget.storageService.getTextSize(section);
+        _textFonts[section] = widget.storageService.getTextFont(section);
       }
     });
   }
 
-  Future<void> _pickColor() async {
-    final Color? selectedColor = await showColorPickerDialog(
-      context: context,
-      initialColor: _brandColor!,
-    );
+  Widget _buttonColorSetting(String label, bool custom) {
+    final color = custom ? _customButtonColor : _amountButtonColor;
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: Material(
+      color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(12),
+      child: InkWell(borderRadius: BorderRadius.circular(12), onTap: () async {
+        final selected = await showColorPickerDialog(context: context, initialColor: color);
+        if (selected != null && mounted) setState(() {
+          if (custom) { _customButtonColor = selected; } else { _amountButtonColor = selected; }
+        });
+      }, child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+        Container(width: 32, height: 32, decoration: BoxDecoration(color: color,
+          borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black12))),
+        const SizedBox(width: 14),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 18))),
+        const Icon(Icons.chevron_right, color: Colors.black45),
+      ]))),
+    ));
+  }
 
-    // If the user picked a color and didn't cancel, update the UI
-    if (selectedColor != null) {
-      await widget.storageService.setBrandColor(selectedColor.toARGB32());
-      setState(() {
-        _brandColor = selectedColor;
-      });
-    }
+  Widget _textAppearance(String section) {
+    final color = _textColors[section] ?? Color(widget.storageService.getTextColor(section));
+    final size = _textSizes[section] ?? widget.storageService.getTextSize(section);
+    final font = _textFonts[section] ?? widget.storageService.getTextFont(section);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Material(
+          color: const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              final selected = await showColorPickerDialog(context: context, initialColor: color);
+              if (selected != null && mounted) setState(() => _textColors[section] = selected);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(children: [
+                Container(width: 32, height: 32, decoration: BoxDecoration(
+                  color: color, borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.black12))),
+                const SizedBox(width: 14),
+                const Expanded(child: Text('Couleur', style: TextStyle(fontSize: 18))),
+                Text('#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                  style: const TextStyle(fontSize: 15, color: Colors.black54)),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, color: Colors.black45),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: font,
+          decoration: const InputDecoration(labelText: 'Police'),
+          items: [
+            DropdownMenuItem(value: 'Amiri', child: Text('Amiri', style: const TextStyle(fontFamily: 'Amiri', fontSize: 18))),
+            DropdownMenuItem(value: 'ReemKufi', child: Text('Reem Kufi', style: const TextStyle(fontFamily: 'ReemKufi', fontSize: 18))),
+            DropdownMenuItem(value: 'Roboto', child: Text('Sans sérif', style: const TextStyle(fontFamily: 'Roboto', fontSize: 18))),
+            DropdownMenuItem(value: 'Cairo', child: Text('Cairo', style: const TextStyle(fontFamily: 'Cairo', fontSize: 18))),
+            DropdownMenuItem(value: 'Tajawal', child: Text('Tajawal', style: const TextStyle(fontFamily: 'Tajawal', fontSize: 18))),
+            DropdownMenuItem(value: 'Almarai', child: Text('Almarai', style: const TextStyle(fontFamily: 'Almarai', fontSize: 18))),
+            DropdownMenuItem(value: 'NotoSansArabic', child: Text('Noto Sans Arabic', style: const TextStyle(fontFamily: 'NotoSansArabic', fontSize: 18))),
+            DropdownMenuItem(value: 'NotoNaskhArabic', child: Text('Noto Naskh Arabic', style: const TextStyle(fontFamily: 'NotoNaskhArabic', fontSize: 18))),
+            DropdownMenuItem(value: 'Lateef', child: Text('Lateef', style: const TextStyle(fontFamily: 'Lateef', fontSize: 18))),
+            DropdownMenuItem(value: 'ScheherazadeNew', child: Text('Scheherazade New', style: const TextStyle(fontFamily: 'ScheherazadeNew', fontSize: 18))),
+            DropdownMenuItem(value: 'ElMessiri', child: Text('El Messiri', style: const TextStyle(fontFamily: 'ElMessiri', fontSize: 18))),
+            DropdownMenuItem(value: 'Inter', child: Text('Inter', style: const TextStyle(fontFamily: 'Inter', fontSize: 18))),
+            DropdownMenuItem(value: 'Lato', child: Text('Lato', style: const TextStyle(fontFamily: 'Lato', fontSize: 18))),
+            DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat', style: const TextStyle(fontFamily: 'Montserrat', fontSize: 18))),
+            DropdownMenuItem(value: 'OpenSans', child: Text('Open Sans', style: const TextStyle(fontFamily: 'OpenSans', fontSize: 18))),
+            DropdownMenuItem(value: 'Nunito', child: Text('Nunito', style: const TextStyle(fontFamily: 'Nunito', fontSize: 18))),
+            DropdownMenuItem(value: 'Poppins', child: Text('Poppins', style: const TextStyle(fontFamily: 'Poppins', fontSize: 18))),
+            DropdownMenuItem(value: 'Raleway', child: Text('Raleway', style: const TextStyle(fontFamily: 'Raleway', fontSize: 18))),
+            DropdownMenuItem(value: 'DMSans', child: Text('DM Sans', style: const TextStyle(fontFamily: 'DMSans', fontSize: 18))),
+            DropdownMenuItem(value: 'Manrope', child: Text('Manrope', style: const TextStyle(fontFamily: 'Manrope', fontSize: 18))),
+            DropdownMenuItem(value: 'Rubik', child: Text('Rubik', style: const TextStyle(fontFamily: 'Rubik', fontSize: 18))),
+          ],
+          onChanged: (value) { if (value != null) setState(() => _textFonts[section] = value); },
+        ),
+        const SizedBox(height: 8),
+        Text('Taille : ${size.round()} px'),
+        Slider(value: size.clamp(12, 72), min: 12, max: 72, divisions: 60,
+          label: '${size.round()} px', onChanged: (value) => setState(() => _textSizes[section] = value)),
+      ]),
+    );
   }
 
   /// Triggers the device's file picker or gallery to choose a brand logo.
@@ -117,9 +212,25 @@ class _SetupScreenState extends State<SetupScreen> {
         maxHeight: 400,
       );
       if (image != null) {
+        final bytes = await image.readAsBytes();
+        if (!mounted) return;
         setState(() {
-          _logoFile = File(image.path);
+          _originalLogoBytes = bytes;
+          _isRemovingBackground = true;
         });
+        try {
+          final transparent = await _logoService.removeBackground(bytes);
+          if (!mounted) return;
+          setState(() => _logoBytes = transparent);
+        } catch (_) {
+          if (!mounted) return;
+          setState(() => _logoBytes = bytes);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Détourage indisponible : logo original conservé. Vérifiez que le service local est lancé.'),
+          ));
+        } finally {
+          if (mounted) setState(() => _isRemovingBackground = false);
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -146,11 +257,14 @@ class _SetupScreenState extends State<SetupScreen> {
 
     try {
       // 1. Process Logo saving if provided
-      if (_logoFile != null) {
-        await widget.storageService.saveLogo(_logoFile!);
+      if (_logoBytes != null) {
+        await widget.storageService.saveLogoBytes(_logoBytes!);
       } else {
         await widget.storageService.clearLogo();
       }
+
+      await widget.storageService.setDonationButtonColor(false, _amountButtonColor.toARGB32());
+      await widget.storageService.setDonationButtonColor(true, _customButtonColor.toARGB32());
 
       // 2. Save Mock Mode
       await widget.storageService.setMockMode(_isMockMode);
@@ -162,6 +276,13 @@ class _SetupScreenState extends State<SetupScreen> {
       // Save custom association fields
       await widget.storageService.setAssociationName(_associationNameController.text.trim());
       await widget.storageService.setShortText(_shortTextController.text.trim());
+      await widget.storageService.setTranslationText(_translationController.text.trim());
+      for (final section in ['main', 'translation', 'association']) {
+        await widget.storageService.setTextAppearance(section,
+          (_textColors[section] ?? Color(widget.storageService.getTextColor(section))).toARGB32(),
+          _textSizes[section] ?? widget.storageService.getTextSize(section),
+          _textFonts[section] ?? widget.storageService.getTextFont(section));
+      }
 
       // 3. Save payment provider details
       if (!_isMockMode) {
@@ -245,26 +366,39 @@ class _SetupScreenState extends State<SetupScreen> {
     _terminalIdController.dispose();
     _associationNameController.dispose();
     _shortTextController.dispose();
+    _translationController.dispose();
+    _logoService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        textTheme: theme.textTheme.apply(fontSizeFactor: 1.2),
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          labelStyle: const TextStyle(fontSize: 18),
+          hintStyle: const TextStyle(fontSize: 17),
+          helperStyle: const TextStyle(fontSize: 15),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(textStyle: const TextStyle(fontSize: 18))),
+        textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(textStyle: const TextStyle(fontSize: 18))),
+      ),
+      child: Scaffold(
       body: Container(
-        // Repeating background pattern as mandated by design specifications
-        decoration: BoxDecoration(
-          color: _brandColor,
+        decoration: const BoxDecoration(
+          color: Color(0xFFEDEDED),
           image: DecorationImage(
-            image: AssetImage(AppConstants.backgroundPattern),
-            repeat: ImageRepeat.repeat,
+            image: AssetImage('assets/legacy/background.jpg'),
+            fit: BoxFit.cover,
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500),
+              constraints: const BoxConstraints(maxWidth: 680),
               child: Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
@@ -287,7 +421,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         const Text(
                           'Saisissez les information de votre compte et de votre terminal Stripe pour commencer.',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 18,
                             color: AppConstants.mutedForeground,
                           ),
                         ),
@@ -296,7 +430,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         // --- Image/Logo Picker Section ---
                         const Text(
                           'Logo',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                         ),
                         const SizedBox(height: 8.0),
                         Row(
@@ -309,10 +443,10 @@ class _SetupScreenState extends State<SetupScreen> {
                                 border: Border.all(color: AppConstants.border, width: 1.0),
                                 borderRadius: BorderRadius.circular(8.0),
                               ),
-                              child: _logoFile != null
+                              child: _logoBytes != null
                                   ? ClipRRect(
                                       borderRadius: BorderRadius.circular(8.0),
-                                      child: Image.file(_logoFile!, fit: BoxFit.cover),
+                                      child: Image.memory(_logoBytes!, fit: BoxFit.contain),
                                     )
                                   : const Icon(
                                       Icons.business,
@@ -322,38 +456,44 @@ class _SetupScreenState extends State<SetupScreen> {
                             ),
                             const SizedBox(width: 16.0),
                             OutlinedButton.icon(
-                              onPressed: _pickLogo,
+                              onPressed: _isRemovingBackground ? null : _pickLogo,
                               icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
-                              label: const Text('Choisissez votre logo'),
+                              label: Text(_isRemovingBackground ? 'Détourage en cours…' : 'Choisissez votre logo'),
                             ),
-                            if (_logoFile != null) ...[
+                            if (_logoBytes != null) ...[
                               const SizedBox(width: 8.0),
                               TextButton(
-                                onPressed: () => setState(() => _logoFile = null),
-                                child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                                onPressed: () => setState(() { _logoBytes = null; _originalLogoBytes = null; }),
+                                child: const Text('Retirer', style: TextStyle(color: Colors.red)),
                               ),
                             ]
                           ],
                         ),
                         const SizedBox(height: 24.0),
 
-                        //color selection section
-                        const Text('Thème'),
-                        const SizedBox(height: 16.0),
-                        ElevatedButton(
-                          onPressed: _pickColor,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color.lerp(_brandColor,Colors.black,0.2),
-                            textStyle: TextStyle(color:  Colors.white ), // Change
+                        if (_isRemovingBackground) const Padding(
+                          padding: EdgeInsets.only(bottom: 16), child: LinearProgressIndicator()),
+                        if (_originalLogoBytes != null && !_isRemovingBackground) Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: TextButton.icon(
+                            icon: const Icon(Icons.restore),
+                            label: const Text('Garder le logo original'),
+                            onPressed: () => setState(() => _logoBytes = _originalLogoBytes),
                           ),
-                          child: Text('Sélectionnez une couleur'),
                         ),
-                        const SizedBox(height: 24.0),
-
+                        const Text('Couleurs des boutons', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        _buttonColorSetting('Montants : 5, 10, 20, 30, 50 €', false),
+                        _buttonColorSetting('Autre montant', true),
+                        TextButton(onPressed: () => setState(() {
+                          _amountButtonColor = const Color(0xFFC9A55C);
+                          _customButtonColor = const Color(0xFF757479);
+                        }), child: const Text('Rétablir les couleurs de base')),
+                        const SizedBox(height: 24),
                         // --- Association Customization Fields ---
                         const Text(
                           'Nom de l\'association / Établissement',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                         ),
                         const SizedBox(height: 8.0),
                         TextFormField(
@@ -369,16 +509,20 @@ class _SetupScreenState extends State<SetupScreen> {
                             return null;
                           },
                         ),
+                        _textAppearance('association'),
                         const SizedBox(height: 20.0),
 
                         const Text(
-                          'Texte d\'appel aux dons (court)',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                          'Texte principal / Verset / Appel aux dons',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                         ),
                         
                         const SizedBox(height: 8.0),
                         TextFormField(
                           controller: _shortTextController,
+                          textDirection: RegExp(r'[\u0600-\u06FF]').hasMatch(_shortTextController.text) ? TextDirection.rtl : TextDirection.ltr,
+                          textAlign: TextAlign.start,
+                          onChanged: (_) => setState(() {}),
                           maxLines: 2,
                           decoration: const InputDecoration(
                             hintText: 'Ex: Soutenez nos actions. Chaque don compte.',
@@ -393,6 +537,17 @@ class _SetupScreenState extends State<SetupScreen> {
                         ),
                         const SizedBox(height: 24.0),
 
+                        _textAppearance('main'),
+                        const Text('Traduction / Texte complémentaire (facultatif)'),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _translationController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(hintText: 'Traduction du verset ou précision sur votre appel aux dons', helperText: 'Entrée permet de choisir vos retours à la ligne.'),
+                        ),
+                        const SizedBox(height: 24),
+
+                        _textAppearance('translation'),
                         // --- Sandbox Simulation Toggle ---
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -409,11 +564,11 @@ class _SetupScreenState extends State<SetupScreen> {
                                   children: const [
                                     Text(
                                       'Mock Reader / Sandbox',
-                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                     ),
                                     Text(
                                       'Simule les paiements sans accès au réseau.',
-                                      style: TextStyle(fontSize: 11, color: AppConstants.mutedForeground),
+                                      style: TextStyle(fontSize: 16, color: AppConstants.mutedForeground),
                                     ),
                                   ],
                                 ),
@@ -450,7 +605,7 @@ class _SetupScreenState extends State<SetupScreen> {
                           //           children: [
                           //             Text(
                           //               'Service de paiement',
-                          //               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppConstants.accent),
+                          //               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppConstants.accent),
                           //             ),
                           //             SizedBox(
                           //               height: 10.0,
@@ -496,11 +651,11 @@ class _SetupScreenState extends State<SetupScreen> {
                                     children: const [
                                       Text(
                                         'Mode test',
-                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppConstants.accentForeground),
+                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppConstants.accentForeground),
                                       ),
                                       Text(
                                         'Testez votre integration avec un terminal de test.',
-                                        style: TextStyle(fontSize: 11, color: AppConstants.accentForeground),
+                                        style: TextStyle(fontSize: 16, color: AppConstants.accentForeground),
                                       ),
                                     ],
                                   ),
@@ -568,7 +723,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           Text(
                                             'Stripe Secret API Key',
                                             textAlign: TextAlign.start,
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
                                           SizedBox(height: 8.0),
                                           TextFormField(
@@ -593,7 +748,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           // Stripe Terminal ID
                                           Text(
                                             'Stripe Terminal Reader ID',
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
 
                                           SizedBox(height: 8.0),
@@ -623,7 +778,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           Text(
                                             'Code commerçant Sumup',
                                             textAlign: TextAlign.start,
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
                                           SizedBox(height: 8.0),
                                           TextFormField(
@@ -644,7 +799,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           Text(
                                             'Sumup API Key',
                                             textAlign: TextAlign.start,
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
                                           SizedBox(height: 8.0),
                                           TextFormField(
@@ -668,7 +823,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           Text(
                                             'Identifiant d\'application Sumup',
                                             textAlign: TextAlign.start,
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
                                           SizedBox(height: 8.0),
                                           TextFormField(
@@ -688,7 +843,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           Text(
                                             'Clé d\'affiliation Sumup',
                                             textAlign: TextAlign.start,
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
                                           SizedBox(height: 8.0),
                                           TextFormField(
@@ -713,7 +868,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                           // Stripe Terminal ID
                                           Text(
                                             'Paircode Sumup',
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppConstants.foreground),
+                                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: AppConstants.foreground),
                                           ),
 
                                           SizedBox(height: 8.0),
@@ -751,10 +906,11 @@ class _SetupScreenState extends State<SetupScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
+                            onPressed: _isLoading || _isRemovingBackground ? null : _handleSubmit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Color.lerp(_brandColor,Colors.black,0.2),
-                              textStyle: TextStyle(color:  Colors.white ), // Change
+                              backgroundColor: const Color(0xFFBDBDBD),
+                              foregroundColor: Colors.white,
+                              textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                             child: _isLoading
                                 ? const SizedBox(
@@ -774,6 +930,6 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
