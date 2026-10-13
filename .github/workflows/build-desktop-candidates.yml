@@ -1,0 +1,83 @@
+name: Versions candidates Windows et Ubuntu
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'pubspec.*'
+      - 'logo_service/**'
+      - 'distribution/**'
+      - '.github/workflows/build-desktop-candidates.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: windows
+          - os: ubuntu-22.04
+            target: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dépendances Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tests Flutter
+        run: |
+          flutter pub get
+          flutter test test/donation_front_test.dart test/logo_service_test.dart
+      - name: Compilation Flutter
+        run: flutter build ${{ matrix.target }} --release
+      - name: Préparer le détourage
+        env:
+          U2NET_HOME: ${{ github.workspace }}/logo_service/models
+        run: |
+          python -m pip install -r logo_service/requirements.txt pyinstaller==6.16.0
+          python -c "from rembg import new_session; new_session('u2net')"
+          python -m unittest discover -s logo_service -p "test_*.py"
+      - name: Compiler le service local
+        run: >-
+          python -m PyInstaller --noconfirm --onedir --name logo-service
+          --collect-all rembg --collect-all onnxruntime --collect-all pymatting
+          --collect-all scipy --collect-all skimage --collect-all numba
+          --add-data "logo_service/models:models" logo_service/server.py
+      - name: Assembler Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force candidate/app | Out-Null
+          Copy-Item build/windows/x64/runner/Release/* candidate/app -Recurse
+          Copy-Item dist/logo-service candidate/logo-service -Recurse
+          Copy-Item distribution/Lancer-borne.cmd candidate/
+          Copy-Item distribution/README-INSTALLATION.md candidate/
+          Compress-Archive -Path candidate/* -DestinationPath borne-windows11-x64-candidate.zip
+      - name: Assembler Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p candidate/app
+          cp -a build/linux/x64/release/bundle/. candidate/app/
+          cp -a dist/logo-service candidate/logo-service
+          cp distribution/lancer-borne.sh distribution/README-INSTALLATION.md candidate/
+          chmod +x candidate/lancer-borne.sh
+          tar -czf borne-ubuntu-x64-candidate.tar.gz -C candidate .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: borne-${{ matrix.target }}-x64-candidate
+          path: |
+            borne-*-candidate.zip
+            borne-*-candidate.tar.gz
+          if-no-files-found: error

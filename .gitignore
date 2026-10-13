@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local background removal runtime and downloaded model
+.logo-venv/
+logo_service/models/
+
+# Generated release bundles
+dist/
+candidate/
+*.spec
+logo_service/__pycache__/

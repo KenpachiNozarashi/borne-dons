@@ -66,6 +66,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/legacy/
     - assets/pattern-background-normal.jpg
     - assets/background-pattern.png
     - assets/basmalah.png
@@ -97,3 +98,67 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+  fonts:
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+          weight: 700
+    - family: ReemKufi
+      fonts:
+        - asset: assets/fonts/ReemKufi.ttf
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo/font.ttf
+    - family: Tajawal
+      fonts:
+        - asset: assets/fonts/Tajawal/font.ttf
+    - family: Almarai
+      fonts:
+        - asset: assets/fonts/Almarai/font.ttf
+    - family: NotoSansArabic
+      fonts:
+        - asset: assets/fonts/NotoSansArabic/font.ttf
+    - family: NotoNaskhArabic
+      fonts:
+        - asset: assets/fonts/NotoNaskhArabic/font.ttf
+    - family: Lateef
+      fonts:
+        - asset: assets/fonts/Lateef/font.ttf
+    - family: ScheherazadeNew
+      fonts:
+        - asset: assets/fonts/ScheherazadeNew/font.ttf
+    - family: ElMessiri
+      fonts:
+        - asset: assets/fonts/ElMessiri/font.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter/font.ttf
+    - family: Lato
+      fonts:
+        - asset: assets/fonts/Lato/font.ttf
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat/font.ttf
+    - family: OpenSans
+      fonts:
+        - asset: assets/fonts/OpenSans/font.ttf
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito/font.ttf
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins/font.ttf
+    - family: Raleway
+      fonts:
+        - asset: assets/fonts/Raleway/font.ttf
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans/font.ttf
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope/font.ttf
+    - family: Rubik
+      fonts:
+        - asset: assets/fonts/Rubik/font.ttf

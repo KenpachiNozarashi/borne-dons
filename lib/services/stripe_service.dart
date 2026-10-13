@@ -143,6 +143,7 @@ class StripeService {
             return {
               'success': true,
               'intent_id': intentId,
+              'payment_confirmed': false,
               'message': 'Paiement autorisé. en attente de validation.',
               'amount': amount,
             };

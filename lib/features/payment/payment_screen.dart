@@ -1,17 +1,17 @@
-/// payment_screen.dart
-///
-/// This is the primary checkout dashboard. It splits the widescreen layout into:
-/// - A beautiful sticky backdrop top bar with branding, connection status, and config gear.
-/// - A centered main section containing the basmalah placeholder, call to action text,
-///   and checkout deck housing the AmountGrid quick checkout board.
-/// - A sticky backdrop bottom bar containing the custom horizontal stepper.
-/// It coordinates state transitions from Step 1 (Awaiting Amount) to Step 2 (Processing Card),
-/// and Step 3 (Captured & Approved) with real-time logging.
+// payment_screen.dart
+//
+// This is the primary checkout dashboard. It splits the widescreen layout into:
+// - A beautiful sticky backdrop top bar with branding, connection status, and config gear.
+// - A centered main section containing the basmalah placeholder, call to action text,
+//   and checkout deck housing the AmountGrid quick checkout board.
+// - A sticky backdrop bottom bar containing the custom horizontal stepper.
+// It coordinates state transitions from Step 1 (Awaiting Amount) to Step 2 (Processing Card),
+// and Step 3 (Captured & Approved) with real-time logging.
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui'; // Required for ImageFilter (Backdrop blur)
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../core/constants.dart';
+import 'package:flutter/gestures.dart';
 import '../../services/storage_service.dart';
 import '../../services/stripe_service.dart';
 import '../../services/sumup_service.dart';
@@ -25,10 +25,10 @@ class PaymentScreen extends StatefulWidget {
   final SumupService sumupService;
 
   const PaymentScreen({
-    Key? key,
+    super.key,
     required this.storageService,
     required this.sumupService,
-  }) : super(key: key);
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -37,17 +37,17 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> {
   final StripeService _stripeService = StripeService();
   final SumupService _sumupService = SumupService();
-  
+
   int _currentCheckoutStep = 1; // 1 = Select, 2 = Processing, 3 = Approved
   String? _logoFilePath;
+  Uint8List? _logoBytes;
+  String _translationText = '';
   bool _isMockMode = false;
   bool _isTestMode = false;
   bool _isStripe = false;
   String _associationName = 'Votre nom d\'association';
-  String _shortText = 'Soutenez notre association. Chaque contribution fait la différence.';
-  Color? _brandColor;
-  Color? _textColor;
-  bool? _isThemeDark = true;
+  String _shortText =
+      'Soutenez notre association. Chaque contribution fait la différence.';
 
   @override
   void initState() {
@@ -59,14 +59,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void _loadMerchantDetails() {
     setState(() {
       _logoFilePath = widget.storageService.getLogoPath();
+      _logoBytes = widget.storageService.getLogoBytes();
+      _translationText = widget.storageService.getTranslationText();
       _isMockMode = widget.storageService.isMockMode();
       _isTestMode = widget.storageService.isTestMode();
       _isStripe = widget.storageService.isStripe();
       _associationName = widget.storageService.getAssociationName();
       _shortText = widget.storageService.getShortText();
-      _brandColor = widget.storageService.getBrandColor() == null ?Color.fromARGB(255, 115, 176, 245) : Color(widget.storageService.getBrandColor()!);
-      _isThemeDark = ThemeData.estimateBrightnessForColor(_brandColor!) == Brightness.dark;
-      _textColor = _isThemeDark! ? Colors.white : AppConstants.accentForeground;
     });
   }
 
@@ -81,33 +80,36 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     // We instantiate a stream controller to broadcast direct status changes
     // from StripeService straight into the dialog box console.
-    final StreamController<String> statusStreamController = StreamController<String>();
+    final StreamController<String> statusStreamController =
+        StreamController<String>();
 
     // Start the transaction future
-    final Future<Map<String, dynamic>> transactionFuture = _stripeService.processPayment(
-      amount: amount,
-      storage: widget.storageService,
-      onStatusUpdate: (message) {
-        statusStreamController.add(message);
-      },
-    );
+    final Future<Map<String, dynamic>> transactionFuture = _stripeService
+        .processPayment(
+          amount: amount,
+          storage: widget.storageService,
+          onStatusUpdate: (message) {
+            statusStreamController.add(message);
+          },
+        );
 
     // Launch Checkout Dialog Box
     final bool? wasCaptured = await showDialog<bool>(
       context: context,
-      barrierDismissible: false, // Prevent backdrop tapping from breaking connection
+      barrierDismissible:
+          false, // Prevent backdrop tapping from breaking connection
       builder: (context) {
         return PaymentDialog(
           amount: amount,
+          neutralButtonColor: Color(widget.storageService.getDonationButtonColor(true)),
           paymentFuture: transactionFuture,
           statusStream: statusStreamController.stream,
+          onApproved: () {
+            if (mounted) setState(() => _currentCheckoutStep = 3);
+          },
         );
       },
     );
-
-    setState((){
-      _currentCheckoutStep= 3;
-    });
 
     // Close the logging stream
     await statusStreamController.close();
@@ -129,8 +131,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
     }
   }
-  
-  
+
   //Sumup checkout
   Future<void> _initiateSumupTransaction(double amount) async {
     // Transition UI to Step 2 (Processing)
@@ -140,33 +141,36 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     // We instantiate a stream controller to broadcast direct status changes
     // from StripeService straight into the dialog box console.
-    final StreamController<String> statusStreamController = StreamController<String>();
+    final StreamController<String> statusStreamController =
+        StreamController<String>();
 
     // Start the transaction future
-    final Future<Map<String, dynamic>> transactionFuture = _sumupService.startSoloCheckout(
-      amount: amount,
-      storage: widget.storageService,
-      onStatusUpdate: (message) {
-        statusStreamController.add(message);
-      },
-    );
+    final Future<Map<String, dynamic>> transactionFuture = _sumupService
+        .startSoloCheckout(
+          amount: amount,
+          storage: widget.storageService,
+          onStatusUpdate: (message) {
+            statusStreamController.add(message);
+          },
+        );
 
     // Launch Checkout Dialog Box
     final bool? wasCaptured = await showDialog<bool>(
       context: context,
-      barrierDismissible: false, // Prevent backdrop tapping from breaking connection
+      barrierDismissible:
+          false, // Prevent backdrop tapping from breaking connection
       builder: (context) {
         return PaymentDialog(
           amount: amount,
+          neutralButtonColor: Color(widget.storageService.getDonationButtonColor(true)),
           paymentFuture: transactionFuture,
           statusStream: statusStreamController.stream,
+          onApproved: () {
+            if (mounted) setState(() => _currentCheckoutStep = 3);
+          },
         );
       },
     );
-
-    setState((){
-      _currentCheckoutStep= 3;
-    });
 
     // Close the logging stream
     await statusStreamController.close();
@@ -193,256 +197,173 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void _navigateToSettings() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => SetupScreen(storageService: widget.storageService, sumupService:widget.sumupService),
+        builder: (context) => SetupScreen(
+          storageService: widget.storageService,
+          sumupService: widget.sumupService,
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    double screenWidth = MediaQuery.sizeOf(context).width;
-
+    const gold = Color(0xFFC9A55C);
     return Scaffold(
-      body: Stack(
-        children: [
-          // --- Layer 1: repeating background pattern ---
-          Positioned.fill(
-            child: Container(
-              decoration:  BoxDecoration(
-                color: _brandColor,
-                image: DecorationImage(
-                  image: AssetImage(AppConstants.backgroundPattern),
-                  repeat: ImageRepeat.repeat,
-                  opacity: 0.5
-                ),
-              ),
-            ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/legacy/background.jpg'),
+            fit: BoxFit.cover,
           ),
-
-          // --- Layer 2: Main Scrollable Content ---
-          Positioned.fill(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Center(
-                child: Container(
-                  constraints: BoxConstraints(maxWidth: screenWidth * 0.85),
-                  child: Column(
-                    spacing: MediaQuery.of(context).size.width * 0.03,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Space for sticky top bar
-                      SizedBox(height: MediaQuery.of(context).size.width * 0.15),
-
-                      // --- Placeholder for basmalah.png ---
-                      Image.asset(
-                        'assets/basmalah.png',
-                        height: MediaQuery.of(context).size.height * 0.2, // 8% of screen width,
-                        color:  
-                          _isThemeDark! ? Colors.amber : Colors.amber[800],
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          // Clean visual fallback when the image doesn't exist in assets yet
-                          return Container(
-                            height: 70,
-                            width: 260,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(8.0),
-                              border: Border.all(color: AppConstants.border.withOpacity(0.5), width: 1.0),
-                            ),
-                            alignment: Alignment.center,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.image_outlined, color: AppConstants.mutedForeground, size: 20),
-                                SizedBox(width: 8.0),
-                                Text(
-                                  'basmalah.png placeholder',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppConstants.mutedForeground,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final compact = constraints.maxHeight < 850;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
                       ),
-                      // const SizedBox(height: 16.0),
-
-                      // --- Short Description Text below Image ---
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text(
-                          _shortText,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: MediaQuery.of(context).size.width * 0.06, // 8% of screen width,
-                            height: 1,
-                            color:  _textColor,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      // const SizedBox(height: 28.0),
-
-                      // --- Main Checkout Card containing presets ---
-                      Card(
-                        elevation: 0,
-                        color: const Color.fromARGB(147, 255, 255, 255),
-                        shape: RoundedRectangleBorder(
-                          side: const BorderSide(color: AppConstants.border, width: 1.0),
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                        child: 
-                            Padding(
-                              padding: const EdgeInsets.all(28.0),
-                              child: AmountGrid(
-                                buttonSize: screenWidth * 0.65 / 2,
-                                onAmountSelected: _isStripe || _isMockMode ? _initiateTerminalTransaction : _initiateSumupTransaction,
-                              ),
-                            ),
-                      ),
-
-                      // Space for sticky bottom stepper
-                      const SizedBox(height: 130.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // --- Layer 3: Sticky Top Bar with Backdrop Blur ---
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                child: Container(
-                  height: MediaQuery.of(context).size.width * 0.15,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(180),
-                    border: const Border(
-                      bottom: BorderSide(color: AppConstants.border, width: 1.0),
-                    ),
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width * 0.07),
-                  child: SafeArea(
-                    bottom: false,
-                    child: Row(
-                      children: [
-                        // Logo / Branding Node
-                        GestureDetector(
-                          onLongPress: _navigateToSettings,
-                          behavior: HitTestBehavior.opaque,
-                          child:
-                            Container(
-                              height: MediaQuery.of(context).size.width * 0.07, // 8% of screen width,
-                              width: MediaQuery.of(context).size.width * 0.07,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(6.0),
-                                border: Border.all(color: AppConstants.border, width: 1.0),
-                              ),
-                              child: _logoFilePath != null
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(6.0),
-                                      child: Image.file(File(_logoFilePath!), fit: BoxFit.cover),
-                                    )
-                                  : const Icon(Icons.favorite_outline, color: AppConstants.primary, size: 20),
-                            )
-                        ),
-                        // const SizedBox(width: 12.0),
-
-                        // Association Title / Subtitle
-                        Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: width),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                _associationName,
-                                style: TextStyle(
-                                  fontSize: MediaQuery.of(context).size.width * 0.05,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                  color: AppConstants.foreground,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: _isMockMode ? _isThemeDark! ? Colors.amber : Colors.amber[800] : _isThemeDark! ? Colors.tealAccent : Colors.teal[800],
-                                      shape: BoxShape.circle,
+                                  GestureDetector(
+
+                                    child: SizedBox(
+                                      width: width < 500 ? 80 : 140,
+                                      height: width < 500 ? 84 : 110,
+                                      child: _logoBytes != null
+                                          ? Image.memory(_logoBytes!, fit: BoxFit.contain)
+                                          : !kIsWeb && _logoFilePath != null
+                                          ? Image.file(
+                                              File(_logoFilePath!),
+                                              fit: BoxFit.contain,
+                                            )
+                                          : const Icon(Icons.business_outlined, color: Color(0xFF757479), size: 40),
                                     ),
                                   ),
-                                  const SizedBox(width: 4.0),
-                                  Text(
-                                    _isMockMode ? 'MODE SIMULATEUR' : _isTestMode ? 'MODE TEST': 'TERMINAL EN LIGNE',
-                                    style: TextStyle(
-                                      fontSize: MediaQuery.of(context).size.width * 0.01,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.2,
-                                      color: _isMockMode ? Colors.orange : AppConstants.success,
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Image.asset(
+                                      'assets/legacy/basmalah.png',
+                                      height: compact ? 84 : 140,
+                                      fit: BoxFit.contain,
                                     ),
+                                  ),
+                                  RawGestureDetector(
+                                    key: const ValueKey('hidden-settings-access'),
+                                    behavior: HitTestBehavior.opaque,
+                                    gestures: {
+                                      LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                                        () => LongPressGestureRecognizer(duration: const Duration(seconds: 5)),
+                                        (recognizer) => recognizer.onLongPress = _navigateToSettings,
+                                      ),
+                                    },
+                                    child: SizedBox(width: width < 500 ? 48 : 100, height: 48),
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 30),
+                              SizedBox(width: double.infinity, child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                _shortText.replaceAll('\n', ' '),
+                                maxLines: 1,
+                                softWrap: false,
+                                textDirection: RegExp(r'[\u0600-\u06FF]').hasMatch(_shortText) ? TextDirection.rtl : TextDirection.ltr,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: widget.storageService.getTextFont('main'),
+                                  fontSize: widget.storageService.getTextSize('main'),
+                                  height: 1.5,
+                                  color: Color(widget.storageService.getTextColor('main')),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ))),
+                              const SizedBox(height: 8),
+                              if (_translationText.isNotEmpty) Text(
+                                _translationText,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: widget.storageService.getTextFont('translation'),
+                                  fontSize: widget.storageService.getTextSize('translation') * (width / 1080).clamp(0.6, 1.0),
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.4,
+                                  color: Color(widget.storageService.getTextColor('translation')),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _associationName,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: widget.storageService.getTextFont('association'),
+                                  fontSize: widget.storageService.getTextSize('association') * (width / 1080).clamp(0.6, 1.0),
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(widget.storageService.getTextColor('association')),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _isMockMode ? 'MODE SIMULATEUR' : _isTestMode ? 'MODE TEST' : 'TERMINAL EN LIGNE',
+                                style: TextStyle(
+                                  color: _isMockMode
+                                      ? const Color(0xFFD97706)
+                                      : _isTestMode
+                                          ? const Color(0xFF2563EB)
+                                          : const Color(0xFF15803D),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 9,
+                                  height: 1.1,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Expanded(child: LayoutBuilder(builder: (context, gridSpace) {
+                                final gridWidth = gridSpace.maxWidth.clamp(0.0, 770.0);
+                                final scale = gridWidth / 770;
+                                final availableHeight = ((gridSpace.maxHeight - 24 - 60 * scale) / 3).clamp(1.0, 430.0 * scale);
+                                return Align(alignment: Alignment.topCenter,
+                                  child: SizedBox(width: gridWidth, child: AmountGrid(
+                                    buttonSize: availableHeight / scale,
+                                    amountColor: Color(widget.storageService.getDonationButtonColor(false)),
+                                    customColor: Color(widget.storageService.getDonationButtonColor(true)),
+                                    onAmountSelected: _isStripe || _isMockMode
+                                      ? _initiateTerminalTransaction : _initiateSumupTransaction,
+                                  )));
+                              })),
                             ],
                           ),
                         ),
-
-                        // // Config Cog Action Button
-                        // IconButton(
-                        //   onPressed: _navigateToSettings,
-                        //   icon: const Icon(Icons.settings_outlined, size: 18),
-                        //   color: AppConstants.foreground,
-                        //   tooltip: 'POS Settings',
-                        // ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
-            ),
-          ),
-
-          // --- Layer 4: Sticky Bottom Stepper with Backdrop Blur ---
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                child: Container(
-                  height: 120.0,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(180),
-                    border: const Border(
-                      top: BorderSide(color: AppConstants.border, width: 1.0),
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: SafeArea(
-                    top: false,
-                    child: CustomStepper(currentStep: _currentCheckoutStep, color:_brandColor!),
-                  ),
+              Container(
+                color: const Color(0xFFEDEDED),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 8,
+                ),
+                child: CustomStepper(
+                  currentStep: _currentCheckoutStep,
+                  color: gold,
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
