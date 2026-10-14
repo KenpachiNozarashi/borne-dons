@@ -212,4 +212,24 @@ void main() {
     });
   }
 
+  test('Default verse includes both closing brackets and keeps saved overrides', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = await StorageService.initialize();
+    expect(storage.getShortText(), '﴿إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ﴾ [التغابن : ١٧]');
+    await storage.setShortText('Texte personnalisé');
+    expect(storage.getShortText(), 'Texte personnalisé');
+  });
+
+  testWidgets('Unconfigured branding shows no default logo or association name', (tester) async {
+    SharedPreferences.setMockInitialValues({'pos_is_mock_mode': true});
+    final storage = await StorageService.initialize();
+    expect(storage.getAssociationName(), '');
+    await tester.pumpWidget(MaterialApp(home: PaymentScreen(storageService: storage, sumupService: SumupService())));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.business_outlined), findsNothing);
+    expect(find.text('Votre association'), findsNothing);
+    await storage.setAssociationName('Association personnalisée');
+    expect(storage.getAssociationName(), 'Association personnalisée');
+  });
+
 }
