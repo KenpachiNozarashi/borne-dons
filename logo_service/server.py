@@ -7,6 +7,17 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Lock
 
+# PyInstaller --windowed sets stdout/stderr to None on Windows.
+# HTTP request logging and some model libraries require writable streams.
+if getattr(sys, 'frozen', False) and (sys.stdout is None or sys.stderr is None):
+    log_dir = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'borne-dons'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_stream = open(log_dir / 'logo-service.log', 'a', encoding='utf-8', buffering=1)
+    if sys.stdout is None:
+        sys.stdout = log_stream
+    if sys.stderr is None:
+        sys.stderr = log_stream
+
 model_dir = Path(sys._MEIPASS) / 'models' if getattr(sys, 'frozen', False) else Path(__file__).parent / 'models'
 os.environ.setdefault('U2NET_HOME', str(model_dir))
 from PIL import Image

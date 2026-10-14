@@ -51,28 +51,28 @@ jobs:
           python -m unittest discover -s logo_service -p "test_*.py"
       - name: Compiler le service local
         run: >-
-          python -m PyInstaller --noconfirm --onedir --name logo-service
+          python -m PyInstaller --noconfirm --onedir --windowed --name logo-service
           --collect-all rembg --collect-all onnxruntime --collect-all pymatting
           --collect-all scipy --collect-all skimage --collect-all numba
           --add-data "logo_service/models:models" logo_service/server.py
+      - name: Vérifier le service empaqueté
+        run: python logo_service/check_bundle.py
       - name: Assembler Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force candidate/app | Out-Null
-          Copy-Item build/windows/x64/runner/Release/* candidate/app -Recurse
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          Copy-Item build/windows/x64/runner/Release/* candidate -Recurse
           Copy-Item dist/logo-service candidate/logo-service -Recurse
-          Copy-Item distribution/Lancer-borne.cmd candidate/
           Copy-Item distribution/README-INSTALLATION.md candidate/
           Compress-Archive -Path candidate/* -DestinationPath borne-windows11-x64-candidate.zip
       - name: Assembler Ubuntu
         if: runner.os == 'Linux'
         run: |
-          mkdir -p candidate/app
-          cp -a build/linux/x64/release/bundle/. candidate/app/
+          mkdir -p candidate
+          cp -a build/linux/x64/release/bundle/. candidate/
           cp -a dist/logo-service candidate/logo-service
-          cp distribution/lancer-borne.sh distribution/README-INSTALLATION.md candidate/
-          chmod +x candidate/lancer-borne.sh
+          cp distribution/README-INSTALLATION.md candidate/
           tar -czf borne-ubuntu-x64-candidate.tar.gz -C candidate .
       - uses: actions/upload-artifact@v4
         with:

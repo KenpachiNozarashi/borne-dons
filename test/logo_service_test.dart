@@ -7,6 +7,7 @@ import 'package:borne_dons/services/logo_service.dart';
 void main() {
   test('Logo is sent only to local service and PNG returned', () async {
     final service = LogoService(client: MockClient((request) async {
+      if (request.url.path == '/health') return http.Response('{\"status\":\"ready\"}', 200);
       expect(request.url.host, '127.0.0.1');
       expect(request.url.port, 3002);
       expect(request.bodyBytes, [1, 2, 3]);
@@ -16,7 +17,7 @@ void main() {
     service.dispose();
   });
   test('Failed removal is reported to caller instead of saved as image', () async {
-    final service = LogoService(client: MockClient((_) async => http.Response('{}', 422)));
+    final service = LogoService(client: MockClient((request) async => http.Response('{}', request.url.path == '/health' ? 200 : 422)));
     await expectLater(service.removeBackground(Uint8List.fromList([1])), throwsException);
     service.dispose();
   });
