@@ -66,7 +66,7 @@ lib/
   1. Configurer le terminal pour le wifi et mettre à jour si besoin
   2. Toucher et glisser vers le bas de l'écran
   3. Sélectionner le mode Cloud API
-  4. saisir le code qui apparait dand l'application
+  4. saisir le code qui apparait dans l'application
     
   https://github.com/user-attachments/assets/9a4d710a-09d7-437c-9d88-4981a5127e6f
 
