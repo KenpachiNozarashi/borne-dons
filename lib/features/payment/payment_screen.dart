@@ -45,7 +45,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isMockMode = false;
   bool _isTestMode = false;
   bool _isStripe = false;
-  String _associationName = 'Votre nom d\'association';
+  String _associationName = ''; 
   String _shortText =
       'Soutenez notre association. Chaque contribution fait la différence.';
 
@@ -248,7 +248,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                               File(_logoFilePath!),
                                               fit: BoxFit.contain,
                                             )
-                                          : const Icon(Icons.business_outlined, color: Color(0xFF757479), size: 40),
+                                          : const SizedBox.shrink(),
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -268,7 +268,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                         (recognizer) => recognizer.onLongPress = _navigateToSettings,
                                       ),
                                     },
-                                    child: SizedBox(width: width < 500 ? 48 : 100, height: 48),
+                                    child: SizedBox(width: width < 500 ? 80 : 160, height: compact ? 84 : 140),
                                   ),
                                 ],
                               ),
@@ -303,7 +303,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              Text(
+                              if (_associationName.trim().isNotEmpty) Text(
                                 _associationName,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
