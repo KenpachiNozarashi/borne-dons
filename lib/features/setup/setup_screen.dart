@@ -10,6 +10,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants.dart';
 import '../../services/storage_service.dart';
@@ -112,6 +113,40 @@ class _SetupScreenState extends State<SetupScreen> {
         _textFonts[section] = widget.storageService.getTextFont(section);
       }
     });
+  }
+
+  Future<void> _exportAppearance() async {
+    final text = widget.storageService.exportAppearance();
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Copier la configuration visuelle'),
+      content: const Text('Copiez la configuration, puis collez-la sur la nouvelle borne avec « Importer ». Les clés de paiement ne sont pas incluses. Seuls les réglages déjà enregistrés sont exportés.'),
+      actions: [TextButton(onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: text));
+        if (context.mounted) Navigator.pop(context);
+      }, child: const Text('Copier'))],
+    ));
+  }
+
+  Future<void> _importAppearance() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Importer la configuration visuelle'),
+      content: TextField(controller: controller, maxLines: 6,
+        decoration: const InputDecoration(hintText: 'Collez ici la configuration copiée depuis la première borne')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+        TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Importer')),
+      ],
+    ));
+    // The dialog route may still be animating; let its field dispose itself first.
+    if (text == null || !mounted) return;
+    try {
+      await widget.storageService.importAppearance(text);
+      await _loadExistingConfigurations();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Configuration visuelle importée.')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Configuration invalide : vérifiez le texte copié.')));
+    }
   }
 
   Widget _buttonColorSetting(String label, bool custom) {
@@ -481,6 +516,11 @@ class _SetupScreenState extends State<SetupScreen> {
                             onPressed: () => setState(() => _logoBytes = _originalLogoBytes),
                           ),
                         ),
+                        Wrap(spacing: 12, runSpacing: 8, children: [
+                          OutlinedButton(onPressed: _exportAppearance, child: const Text('Exporter les réglages visuels')),
+                          OutlinedButton(onPressed: _importAppearance, child: const Text('Importer les réglages visuels')),
+                        ]),
+                        const SizedBox(height: 24),
                         const Text('Couleurs des boutons', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
                         _buttonColorSetting('Montants : 5, 10, 20, 30, 50 €', false),

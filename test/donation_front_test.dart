@@ -212,4 +212,12 @@ void main() {
     });
   }
 
+  test('Default verse includes both closing brackets and keeps saved overrides', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = await StorageService.initialize();
+    expect(storage.getShortText(), '﴿إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ﴾ [التغابن : ١٧]');
+    await storage.setShortText('Texte personnalisé');
+    expect(storage.getShortText(), 'Texte personnalisé');
+  });
+
 }

@@ -150,6 +150,46 @@ class StorageService {
     await _prefs.remove(_keyLogoPath);
   }
 
+  static const _appearanceKeys = <String>[
+    'association_name', 'short_text', 'translation_text', 'company_logo_bytes',
+    'amount_buttons_color', 'custom_button_color',
+    'text_main_color', 'text_main_size', 'text_main_font',
+    'text_translation_color', 'text_translation_size', 'text_translation_font',
+    'text_association_color', 'text_association_size', 'text_association_font',
+  ];
+
+  String exportAppearance() => jsonEncode({
+    'format': 'borne-appearance-v1',
+    'settings': {for (final key in _appearanceKeys) if (_prefs.containsKey(key)) key: _prefs.get(key)},
+  });
+
+  Future<void> importAppearance(String text) async {
+    final data = jsonDecode(text);
+    if (data is! Map || data['format'] != 'borne-appearance-v1' || data['settings'] is! Map) {
+      throw const FormatException('Configuration invalide.');
+    }
+    final settings = data['settings'] as Map;
+    for (final key in _appearanceKeys) {
+      final value = settings[key];
+      if (value == null) continue;
+      if (key.endsWith('_size')) {
+        if (value is! num || value < 12 || value > 72) throw const FormatException('Taille invalide.');
+      } else if (key.endsWith('_color')) {
+        if (value is! int || value < 0 || value > 0xFFFFFFFF) throw const FormatException('Couleur invalide.');
+      } else if (value is! String) {
+        throw const FormatException('Texte invalide.');
+      }
+      if (key == 'company_logo_bytes') base64Decode(value as String);
+    }
+    for (final key in _appearanceKeys) {
+      final value = settings[key];
+      if (value == null) continue;
+      if (key.endsWith('_size')) { await _prefs.setDouble(key, (value as num).toDouble()); }
+      else if (value is int) { await _prefs.setInt(key, value); }
+      else { await _prefs.setString(key, value as String); }
+    }
+  }
+
   int getDonationButtonColor(bool custom) => _prefs.getInt(custom ? 'custom_button_color' : 'amount_buttons_color') ??
       (custom ? 0xFF757479 : 0xFFC9A55C);
 
@@ -254,7 +294,7 @@ class StorageService {
   /// Gets the stored short text for calls to action, with default.
   String getShortText() {
     return _prefs.getString(_keyShortText) ?? 
-        'إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ';
+        '﴿إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ﴾ [التغابن : ١٧]';
   }
 
   /// Sets the stored short text for calls to action.
