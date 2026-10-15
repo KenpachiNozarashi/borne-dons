@@ -22,7 +22,7 @@ class StorageService {
   static const String _keySumupReaderId = 'sumup_reader_id';
   static const String _keyStripeSecret = 'stripe_secret_key';
   static const String _keyTerminalId = 'stripe_terminal_id';
-  
+
   // --- Shared Preferences Keys ---
   static const String _keyLogoPath = 'company_logo_path';
   static const String _keyBrandColor = 'brand_color';
@@ -38,8 +38,8 @@ class StorageService {
   StorageService({
     required FlutterSecureStorage secureStorage,
     required SharedPreferences prefs,
-  })  : _secureStorage = secureStorage,
-        _prefs = prefs;
+  }) : _secureStorage = secureStorage,
+       _prefs = prefs;
 
   /// Factory initializer to resolve dependencies asynchronously before application startup.
   static Future<StorageService> initialize() async {
@@ -56,57 +56,66 @@ class StorageService {
     return StorageService(secureStorage: secureStorage, prefs: prefs);
   }
 
-
   // --- Sumup Credentials Handling ---
   /// Reads the stored Sumup Merchant Code securely.
   Future<String?> getSumupMerchantCode() async {
     return await _secureStorage.read(key: _keySumupMerchantCode);
   }
+
   /// Writes the Sumup Merchant Code securely.
   Future<void> setSumupMerchantCode(String merchantCode) async {
     await _secureStorage.write(key: _keySumupMerchantCode, value: merchantCode);
   }
+
   /// Reads the stored Sumup Api Key securely.
   Future<String?> getSumupApiKey() async {
     return await _secureStorage.read(key: _keySumupApiKey);
   }
+
   /// Writes the Sumup Api Key securely.
   Future<void> setSumupApiKey(String apiKey) async {
     await _secureStorage.write(key: _keySumupApiKey, value: apiKey);
   }
+
   /// Reads the stored Sumup App Id securely.
   Future<String?> getSumupAppId() async {
     return await _secureStorage.read(key: _keySumupAppId);
   }
+
   /// Writes the Sumup Api Key securely.
   Future<void> setSumupAppId(String id) async {
     await _secureStorage.write(key: _keySumupAppId, value: id);
   }
+
   /// Reads the stored Sumup Api Key securely.
   Future<String?> getSumupAfKey() async {
     return await _secureStorage.read(key: _keySumupAfKey);
   }
+
   /// Writes the Sumup Api Key securely.
   Future<void> setSumupAfKey(String key) async {
     await _secureStorage.write(key: _keySumupAfKey, value: key);
   }
+
   /// Reads the stored Sumup Pairign Code securely.
   Future<String?> getSumupPairingCode() async {
     return await _secureStorage.read(key: _keySumupPairingCode);
   }
+
   /// Writes the Sumup Api Key securely.
   Future<void> setSumupPairingCode(String pairingCode) async {
     await _secureStorage.write(key: _keySumupPairingCode, value: pairingCode);
   }
+
   /// Reads the stored Sumup Pairign Code securely.
   Future<String?> getSumupReaderId() async {
     return await _secureStorage.read(key: _keySumupReaderId);
   }
+
   /// Writes the Sumup Api Key securely.
   Future<void> setSumupReaderId(String id) async {
     await _secureStorage.write(key: _keySumupReaderId, value: id);
   }
-
 
   // --- Stripe Credentials Handling ---
   /// Reads the stored Stripe Secret Key securely.
@@ -130,11 +139,11 @@ class StorageService {
   }
 
   // --- Brand Color operations ---
-  int? getBrandColor(){
+  int? getBrandColor() {
     return _prefs.getInt(_keyBrandColor);
   }
 
-  Future<bool> setBrandColor(int colorValue){
+  Future<bool> setBrandColor(int colorValue) {
     return _prefs.setInt(_keyBrandColor, colorValue);
   }
 
@@ -150,69 +159,144 @@ class StorageService {
     await _prefs.remove(_keyLogoPath);
   }
 
+  double getLogoScale() =>
+      (_prefs.getDouble('logo_scale') ?? 1).clamp(0.5, 1.6);
+
+  Future<void> setLogoScale(double value) async {
+    await _prefs.setDouble('logo_scale', value.clamp(0.5, 1.6));
+  }
+
+  Uint8List? getBackgroundBytes() {
+    final value = _prefs.getString('app_background_bytes');
+    return value == null ? null : base64Decode(value);
+  }
+
+  Future<void> setBackgroundBytes(Uint8List? bytes) async {
+    if (bytes == null) {
+      await _prefs.remove('app_background_bytes');
+    } else {
+      await _prefs.setString('app_background_bytes', base64Encode(bytes));
+    }
+  }
+
   static const _appearanceKeys = <String>[
-    'association_name', 'short_text', 'translation_text', 'company_logo_bytes',
-    'amount_buttons_color', 'custom_button_color',
-    'text_main_color', 'text_main_size', 'text_main_font',
-    'text_translation_color', 'text_translation_size', 'text_translation_font',
-    'text_association_color', 'text_association_size', 'text_association_font',
+    'association_name',
+    'short_text',
+    'translation_text',
+    'company_logo_bytes',
+    'amount_buttons_color',
+    'custom_button_color',
+    'logo_scale',
+    'app_background_bytes',
+    'text_main_color',
+    'text_main_size',
+    'text_main_font',
+    'text_translation_color',
+    'text_translation_size',
+    'text_translation_font',
+    'text_association_color',
+    'text_association_size',
+    'text_association_font',
   ];
 
   String exportAppearance() => jsonEncode({
     'format': 'borne-appearance-v1',
-    'settings': {for (final key in _appearanceKeys) if (_prefs.containsKey(key)) key: _prefs.get(key)},
+    'settings': {
+      for (final key in _appearanceKeys)
+        if (_prefs.containsKey(key)) key: _prefs.get(key),
+    },
   });
 
-  Future<void> importAppearance(String text) async {
+  static Map<String, dynamic> decodeAppearance(String text) {
     final data = jsonDecode(text);
-    if (data is! Map || data['format'] != 'borne-appearance-v1' || data['settings'] is! Map) {
+    if (data is! Map ||
+        data['format'] != 'borne-appearance-v1' ||
+        data['settings'] is! Map) {
       throw const FormatException('Configuration invalide.');
     }
     final settings = data['settings'] as Map;
     for (final key in _appearanceKeys) {
       final value = settings[key];
       if (value == null) continue;
-      if (key.endsWith('_size')) {
-        if (value is! num || value < 12 || value > 72) throw const FormatException('Taille invalide.');
+      if (key == 'logo_scale') {
+        if (value is! num || !value.isFinite || value < 0.5 || value > 1.6)
+          throw const FormatException('Taille du logo invalide.');
+      } else if (key.endsWith('_size')) {
+        if (value is! num || value < 12 || value > 72)
+          throw const FormatException('Taille invalide.');
       } else if (key.endsWith('_color')) {
-        if (value is! int || value < 0 || value > 0xFFFFFFFF) throw const FormatException('Couleur invalide.');
+        if (value is! int || value < 0 || value > 0xFFFFFFFF)
+          throw const FormatException('Couleur invalide.');
       } else if (value is! String) {
         throw const FormatException('Texte invalide.');
       }
-      if (key == 'company_logo_bytes') base64Decode(value as String);
+      if (key == 'company_logo_bytes' || key == 'app_background_bytes') {
+        if ((value as String).length > 6000000)
+          throw const FormatException('Image trop volumineuse.');
+        base64Decode(value);
+      }
     }
+    return {
+      for (final key in _appearanceKeys)
+        if (settings[key] != null) key: settings[key],
+    };
+  }
+
+  Future<void> importAppearance(String text) async {
+    final settings = decodeAppearance(text);
     for (final key in _appearanceKeys) {
       final value = settings[key];
       if (value == null) continue;
-      if (key.endsWith('_size')) { await _prefs.setDouble(key, (value as num).toDouble()); }
-      else if (value is int) { await _prefs.setInt(key, value); }
-      else { await _prefs.setString(key, value as String); }
+      if (key.endsWith('_size') || key == 'logo_scale') {
+        await _prefs.setDouble(key, (value as num).toDouble());
+      } else if (value is int) {
+        await _prefs.setInt(key, value);
+      } else {
+        await _prefs.setString(key, value as String);
+      }
     }
   }
 
-  int getDonationButtonColor(bool custom) => _prefs.getInt(custom ? 'custom_button_color' : 'amount_buttons_color') ??
+  int getDonationButtonColor(bool custom) =>
+      _prefs.getInt(custom ? 'custom_button_color' : 'amount_buttons_color') ??
       (custom ? 0xFF757479 : 0xFFC9A55C);
 
   Future<void> setDonationButtonColor(bool custom, int value) async {
-    await _prefs.setInt(custom ? 'custom_button_color' : 'amount_buttons_color', value);
+    await _prefs.setInt(
+      custom ? 'custom_button_color' : 'amount_buttons_color',
+      value,
+    );
   }
 
-  int getTextColor(String section) => _prefs.getInt('text_${section}_color') ??
+  int getTextColor(String section) =>
+      _prefs.getInt('text_${section}_color') ??
       (section == 'main' ? 0xFFC9A55C : 0xFF757479);
 
-  double getTextSize(String section) => _prefs.getDouble('text_${section}_size') ??
-      (section == 'main' ? 36 : section == 'translation' ? 24 : 40);
+  double getTextSize(String section) =>
+      _prefs.getDouble('text_${section}_size') ??
+      (section == 'main'
+          ? 36
+          : section == 'translation'
+          ? 24
+          : 40);
 
-  String getTextFont(String section) => _prefs.getString('text_${section}_font') ??
+  String getTextFont(String section) =>
+      _prefs.getString('text_${section}_font') ??
       (section == 'main' ? 'Amiri' : 'ReemKufi');
 
-  Future<void> setTextAppearance(String section, int color, double size, String font) async {
+  Future<void> setTextAppearance(
+    String section,
+    int color,
+    double size,
+    String font,
+  ) async {
     await _prefs.setInt('text_${section}_color', color);
     await _prefs.setDouble('text_${section}_size', size);
     await _prefs.setString('text_${section}_font', font);
   }
 
-  String getTranslationText() => _prefs.getString('translation_text') ??
+  String getTranslationText() =>
+      _prefs.getString('translation_text') ??
       '« Si vous faites à Allah un prêt sincère, Il le multipliera pour vous et vous pardonnera. Allah cependant est très Reconnaissant et Indulgent. » [At-Taghaabun : 17]';
 
   Future<void> setTranslationText(String value) async {
@@ -230,12 +314,13 @@ class StorageService {
     try {
       final Directory docDir = await getApplicationDocumentsDirectory();
       final String fileExtension = p.extension(sourceFile.path);
-      final String newFileName = 'company_logo_${DateTime.now().millisecondsSinceEpoch}$fileExtension';
+      final String newFileName =
+          'company_logo_${DateTime.now().millisecondsSinceEpoch}$fileExtension';
       final String destinationPath = p.join(docDir.path, newFileName);
-      
+
       // Copy source file to permanent storage
       final File savedFile = await sourceFile.copy(destinationPath);
-      
+
       // Save path to preferences
       await _prefs.setString(_keyLogoPath, savedFile.path);
       return savedFile.path;
@@ -256,6 +341,7 @@ class StorageService {
   bool isMockMode() {
     return _prefs.getBool(_keyIsMockMode) ?? false;
   }
+
   /// Check if the POS is running in "Integration test" mode for demo purposes.
   bool isTestMode() {
     return _prefs.getBool(_keyIsTestMode) ?? false;
@@ -270,10 +356,12 @@ class StorageService {
   Future<void> setMockMode(bool enabled) async {
     await _prefs.setBool(_keyIsMockMode, enabled);
   }
+
   /// Toggles test integration  mode.
   Future<void> setTestMode(bool enabled) async {
     await _prefs.setBool(_keyIsTestMode, enabled);
   }
+
   /// Toggles test integration  mode.
   Future<void> setIsStripe(bool enabled) async {
     await _prefs.setBool(_keyIsStripe, enabled);
@@ -281,10 +369,10 @@ class StorageService {
 
   // --- Association & Short Text Configuration ---
 
-  /// Returns an optional association name; hide the former placeholder.
+  /// New installations start with a generic title. Saved choices, including
+  /// an intentionally empty title, remain unchanged.
   String getAssociationName() {
-    final name = _prefs.getString(_keyAssociationName) ?? '';
-    return name == 'Votre association' ? '' : name;
+    return _prefs.getString(_keyAssociationName) ?? 'Votre association';
   }
 
   /// Sets the stored Association Name.
@@ -294,7 +382,7 @@ class StorageService {
 
   /// Gets the stored short text for calls to action, with default.
   String getShortText() {
-    return _prefs.getString(_keyShortText) ?? 
+    return _prefs.getString(_keyShortText) ??
         '﴿إِن تُقْرِضُوا اللَّهَ قَرْضًا حَسَنًا يُضَاعِفْهُ لَكُمْ وَيَغْفِرْ لَكُمْ ۚ وَاللَّهُ شَكُورٌ حَلِيمٌ﴾ [التغابن : ١٧]';
   }
 
@@ -311,14 +399,16 @@ class StorageService {
     if (isMockMode()) {
       return true;
     }
-    if(isStripe()){
+    if (isStripe()) {
       final secret = await getStripeSecretKey();
       final terminal = await getTerminalId();
-      return secret != null && secret.isNotEmpty && terminal != null && terminal.isNotEmpty;
-    }else{
+      return secret != null &&
+          secret.isNotEmpty &&
+          terminal != null &&
+          terminal.isNotEmpty;
+    } else {
       final sumupReaderId = await getSumupReaderId();
       return sumupReaderId != null && sumupReaderId.isNotEmpty;
-
     }
   }
 
