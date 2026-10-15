@@ -16,6 +16,7 @@ import '../../services/storage_service.dart';
 import '../../services/stripe_service.dart';
 import '../../services/sumup_service.dart';
 import '../setup/setup_screen.dart';
+import '../app_background.dart';
 import 'widgets/amount_grid.dart';
 import 'widgets/custom_stepper.dart';
 import 'widgets/payment_dialog.dart';
@@ -45,7 +46,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isMockMode = false;
   bool _isTestMode = false;
   bool _isStripe = false;
-  String _associationName = ''; 
+  String _associationName = '';
   String _shortText =
       'Soutenez notre association. Chaque contribution fait la différence.';
 
@@ -101,7 +102,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
       builder: (context) {
         return PaymentDialog(
           amount: amount,
-          neutralButtonColor: Color(widget.storageService.getDonationButtonColor(true)),
+          neutralButtonColor: Color(
+            widget.storageService.getDonationButtonColor(true),
+          ),
           paymentFuture: transactionFuture,
           statusStream: statusStreamController.stream,
           onApproved: () {
@@ -162,7 +165,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
       builder: (context) {
         return PaymentDialog(
           amount: amount,
-          neutralButtonColor: Color(widget.storageService.getDonationButtonColor(true)),
+          neutralButtonColor: Color(
+            widget.storageService.getDonationButtonColor(true),
+          ),
           paymentFuture: transactionFuture,
           statusStream: statusStreamController.stream,
           onApproved: () {
@@ -209,13 +214,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget build(BuildContext context) {
     const gold = Color(0xFFC9A55C);
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/legacy/background.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
+      body: AppBackground(
+        bytes: widget.storageService.getBackgroundBytes(),
         child: SafeArea(
           child: Column(
             children: [
@@ -224,6 +224,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   builder: (context, constraints) {
                     final width = constraints.maxWidth;
                     final compact = constraints.maxHeight < 850;
+                    // Reserve the same space on both sides, independently of the
+                    // selected logo size, so the basmala stays centred on screen.
+                    final maxLogoWidth = ((width < 500 ? 80.0 : 140.0) * 1.6)
+                        .clamp(40.0, (width - 48) * 0.25);
+                    final settingsWidth = width < 500 ? 80.0 : 160.0;
+                    final sideWidth = maxLogoWidth > settingsWidth
+                        ? maxLogoWidth
+                        : settingsWidth;
+                    final headerHeight = compact ? 140.0 : 176.0;
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -236,111 +245,221 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             children: [
                               Row(
                                 children: [
-                                  GestureDetector(
-
-                                    child: SizedBox(
-                                      width: width < 500 ? 80 : 140,
-                                      height: width < 500 ? 84 : 110,
-                                      child: _logoBytes != null
-                                          ? Image.memory(_logoBytes!, fit: BoxFit.contain)
-                                          : !kIsWeb && _logoFilePath != null
-                                          ? Image.file(
-                                              File(_logoFilePath!),
-                                              fit: BoxFit.contain,
-                                            )
-                                          : const SizedBox.shrink(),
+                                  SizedBox(
+                                    width: sideWidth,
+                                    height: headerHeight,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: SizedBox(
+                                        key: const ValueKey('header-logo'),
+                                        width:
+                                            ((width < 500 ? 80.0 : 140.0) *
+                                                    widget.storageService
+                                                        .getLogoScale())
+                                                .clamp(
+                                                  40.0,
+                                                  (width - 48) * 0.25,
+                                                ),
+                                        height:
+                                            ((width < 500 ? 84.0 : 110.0) *
+                                                    widget.storageService
+                                                        .getLogoScale())
+                                                .clamp(
+                                                  42.0,
+                                                  compact ? 140.0 : 176.0,
+                                                ),
+                                        child: _logoBytes != null
+                                            ? Image.memory(
+                                                _logoBytes!,
+                                                fit: BoxFit.contain,
+                                              )
+                                            : !kIsWeb && _logoFilePath != null
+                                            ? Image.file(
+                                                File(_logoFilePath!),
+                                                fit: BoxFit.contain,
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Image.asset(
                                       'assets/legacy/basmalah.png',
+                                      key: const ValueKey('header-basmala'),
                                       height: compact ? 84 : 140,
                                       fit: BoxFit.contain,
                                     ),
                                   ),
-                                  RawGestureDetector(
-                                    key: const ValueKey('hidden-settings-access'),
-                                    behavior: HitTestBehavior.opaque,
-                                    gestures: {
-                                      LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-                                        () => LongPressGestureRecognizer(duration: const Duration(seconds: 5)),
-                                        (recognizer) => recognizer.onLongPress = _navigateToSettings,
+                                  const SizedBox(width: 16),
+                                  SizedBox(
+                                    width: sideWidth,
+                                    height: headerHeight,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: RawGestureDetector(
+                                        key: const ValueKey(
+                                          'hidden-settings-access',
+                                        ),
+                                        behavior: HitTestBehavior.opaque,
+                                        gestures: {
+                                          LongPressGestureRecognizer:
+                                              GestureRecognizerFactoryWithHandlers<
+                                                LongPressGestureRecognizer
+                                              >(
+                                                () =>
+                                                    LongPressGestureRecognizer(
+                                                      duration: const Duration(
+                                                        seconds: 5,
+                                                      ),
+                                                    ),
+                                                (recognizer) =>
+                                                    recognizer.onLongPress =
+                                                        _navigateToSettings,
+                                              ),
+                                        },
+                                        child: SizedBox(
+                                          width: width < 500 ? 80 : 160,
+                                          height: compact ? 84 : 140,
+                                        ),
                                       ),
-                                    },
-                                    child: SizedBox(width: width < 500 ? 80 : 160, height: compact ? 84 : 140),
+                                    ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 30),
-                              SizedBox(width: double.infinity, child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                _shortText.replaceAll('\n', ' '),
-                                maxLines: 1,
-                                softWrap: false,
-                                textDirection: RegExp(r'[\u0600-\u06FF]').hasMatch(_shortText) ? TextDirection.rtl : TextDirection.ltr,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontFamily: widget.storageService.getTextFont('main'),
-                                  fontSize: widget.storageService.getTextSize('main'),
-                                  height: 1.5,
-                                  color: Color(widget.storageService.getTextColor('main')),
-                                  fontWeight: FontWeight.bold,
+                              SizedBox(
+                                width: double.infinity,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _shortText.replaceAll('\n', ' '),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    textDirection:
+                                        RegExp(
+                                          r'[\u0600-\u06FF]',
+                                        ).hasMatch(_shortText)
+                                        ? TextDirection.rtl
+                                        : TextDirection.ltr,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontFamily: widget.storageService
+                                          .getTextFont('main'),
+                                      fontSize: widget.storageService
+                                          .getTextSize('main'),
+                                      height: 1.5,
+                                      color: Color(
+                                        widget.storageService.getTextColor(
+                                          'main',
+                                        ),
+                                      ),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                              ))),
+                              ),
                               const SizedBox(height: 8),
-                              if (_translationText.isNotEmpty) Text(
-                                _translationText,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontFamily: widget.storageService.getTextFont('translation'),
-                                  fontSize: widget.storageService.getTextSize('translation') * (width / 1080).clamp(0.6, 1.0),
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.4,
-                                  color: Color(widget.storageService.getTextColor('translation')),
-                                  fontStyle: FontStyle.italic,
+                              if (_translationText.isNotEmpty)
+                                Text(
+                                  _translationText,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: widget.storageService
+                                        .getTextFont('translation'),
+                                    fontSize:
+                                        widget.storageService.getTextSize(
+                                          'translation',
+                                        ) *
+                                        (width / 1080).clamp(0.6, 1.0),
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.4,
+                                    color: Color(
+                                      widget.storageService.getTextColor(
+                                        'translation',
+                                      ),
+                                    ),
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 16),
-                              if (_associationName.trim().isNotEmpty) Text(
-                                _associationName,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontFamily: widget.storageService.getTextFont('association'),
-                                  fontSize: widget.storageService.getTextSize('association') * (width / 1080).clamp(0.6, 1.0),
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(widget.storageService.getTextColor('association')),
+                              if (_associationName.trim().isNotEmpty)
+                                Text(
+                                  _associationName,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: widget.storageService
+                                        .getTextFont('association'),
+                                    fontSize:
+                                        widget.storageService.getTextSize(
+                                          'association',
+                                        ) *
+                                        (width / 1080).clamp(0.6, 1.0),
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(
+                                      widget.storageService.getTextColor(
+                                        'association',
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 4),
                               Text(
-                                _isMockMode ? 'MODE SIMULATEUR' : _isTestMode ? 'MODE TEST' : 'TERMINAL EN LIGNE',
+                                _isMockMode
+                                    ? 'MODE SIMULATEUR'
+                                    : _isTestMode
+                                    ? 'MODE TEST'
+                                    : 'TERMINAL EN LIGNE',
                                 style: TextStyle(
                                   color: _isMockMode
                                       ? const Color(0xFFD97706)
                                       : _isTestMode
-                                          ? const Color(0xFF2563EB)
-                                          : const Color(0xFF15803D),
+                                      ? const Color(0xFF2563EB)
+                                      : const Color(0xFF15803D),
                                   fontWeight: FontWeight.w500,
                                   fontSize: 9,
                                   height: 1.1,
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              Expanded(child: LayoutBuilder(builder: (context, gridSpace) {
-                                final gridWidth = gridSpace.maxWidth.clamp(0.0, 770.0);
-                                final scale = gridWidth / 770;
-                                final availableHeight = ((gridSpace.maxHeight - 24 - 60 * scale) / 3).clamp(1.0, 430.0 * scale);
-                                return Align(alignment: Alignment.topCenter,
-                                  child: SizedBox(width: gridWidth, child: AmountGrid(
-                                    buttonSize: availableHeight / scale,
-                                    amountColor: Color(widget.storageService.getDonationButtonColor(false)),
-                                    customColor: Color(widget.storageService.getDonationButtonColor(true)),
-                                    onAmountSelected: _isStripe || _isMockMode
-                                      ? _initiateTerminalTransaction : _initiateSumupTransaction,
-                                  )));
-                              })),
+                              Expanded(
+                                child: LayoutBuilder(
+                                  builder: (context, gridSpace) {
+                                    final gridWidth = gridSpace.maxWidth.clamp(
+                                      0.0,
+                                      770.0,
+                                    );
+                                    final scale = gridWidth / 770;
+                                    final availableHeight =
+                                        ((gridSpace.maxHeight -
+                                                    24 -
+                                                    60 * scale) /
+                                                3)
+                                            .clamp(1.0, 430.0 * scale);
+                                    return Align(
+                                      alignment: Alignment.topCenter,
+                                      child: SizedBox(
+                                        width: gridWidth,
+                                        child: AmountGrid(
+                                          buttonSize: availableHeight / scale,
+                                          amountColor: Color(
+                                            widget.storageService
+                                                .getDonationButtonColor(false),
+                                          ),
+                                          customColor: Color(
+                                            widget.storageService
+                                                .getDonationButtonColor(true),
+                                          ),
+                                          onAmountSelected:
+                                              _isStripe || _isMockMode
+                                              ? _initiateTerminalTransaction
+                                              : _initiateSumupTransaction,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             ],
                           ),
                         ),
