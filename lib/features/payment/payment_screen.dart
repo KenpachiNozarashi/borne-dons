@@ -37,7 +37,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   final StripeService _stripeService = StripeService();
-  final SumupService _sumupService = SumupService();
+  bool _transactionActive = false;
 
   int _currentCheckoutStep = 1; // 1 = Select, 2 = Processing, 3 = Approved
   String? _logoFilePath;
@@ -74,6 +74,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   /// Creates the async future, opens the transaction modal, pushes updates to a log stream,
   /// updates step phases, and manages post-approval UI reset.
   Future<void> _initiateTerminalTransaction(double amount) async {
+    if (_transactionActive) return;
+    _transactionActive = true;
     // Transition UI to Step 2 (Processing)
     setState(() {
       _currentCheckoutStep = 2;
@@ -131,75 +133,65 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (mounted) {
       setState(() {
         _currentCheckoutStep = 1;
+        _transactionActive = false;
       });
     }
   }
 
-  //Sumup checkout
   Future<void> _initiateSumupTransaction(double amount) async {
-    // Transition UI to Step 2 (Processing)
+    if (!mounted || _transactionActive) return;
     setState(() {
+      _transactionActive = true;
       _currentCheckoutStep = 2;
     });
-
-    // We instantiate a stream controller to broadcast direct status changes
-    // from StripeService straight into the dialog box console.
-    final StreamController<String> statusStreamController =
-        StreamController<String>();
-
-    // Start the transaction future
-    final Future<Map<String, dynamic>> transactionFuture = _sumupService
-        .startSoloCheckout(
+    final statuses = StreamController<String>();
+    final future = widget.sumupService.startSoloCheckout(
+      amount: amount,
+      storage: widget.storageService,
+      onStatusUpdate: (message) {
+        if (!statuses.isClosed) statuses.add(message);
+      },
+    );
+    try {
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PaymentDialog(
           amount: amount,
-          storage: widget.storageService,
-          onStatusUpdate: (message) {
-            statusStreamController.add(message);
-          },
-        );
-
-    // Launch Checkout Dialog Box
-    final bool? wasCaptured = await showDialog<bool>(
-      context: context,
-      barrierDismissible:
-          false, // Prevent backdrop tapping from breaking connection
-      builder: (context) {
-        return PaymentDialog(
-          amount: amount,
+          autoCloseFailures: true,
+          onCancelPayment: widget.sumupService.requestCancellation,
           neutralButtonColor: Color(
             widget.storageService.getDonationButtonColor(true),
           ),
-          paymentFuture: transactionFuture,
-          statusStream: statusStreamController.stream,
+          paymentFuture: future,
+          statusStream: statuses.stream,
           onApproved: () {
             if (mounted) setState(() => _currentCheckoutStep = 3);
           },
-        );
-      },
-    );
-
-    // Close the logging stream
-    await statusStreamController.close();
-
-    if (wasCaptured == true) {
-      // Transition UI to Step 3 (Approved & Finalized)
-      setState(() {
-        _currentCheckoutStep = 3;
-      });
-
-      // Display approval message or let the success state persist briefly
-      await Future.delayed(const Duration(seconds: 1));
-    }
-
-    // Reset workflow to Step 1 (Awaiting selection)
-    if (mounted) {
-      setState(() {
-        _currentCheckoutStep = 1;
-      });
+        ),
+      );
+    } finally {
+      await statuses.close();
+      if (mounted)
+        setState(() {
+          _transactionActive = false;
+          _currentCheckoutStep = 1;
+        });
     }
   }
 
   /// Reroutes to setup screen to update tokens or keys.
   void _navigateToSettings() {
+    if (_transactionActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Un paiement est en cours. Les paramètres restent verrouillés.',
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => SetupScreen(
@@ -440,20 +432,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                       alignment: Alignment.topCenter,
                                       child: SizedBox(
                                         width: gridWidth,
-                                        child: AmountGrid(
-                                          buttonSize: availableHeight / scale,
-                                          amountColor: Color(
-                                            widget.storageService
-                                                .getDonationButtonColor(false),
+                                        child: AbsorbPointer(
+                                          absorbing: _transactionActive,
+                                          child: AmountGrid(
+                                            buttonSize: availableHeight / scale,
+                                            amountColor: Color(
+                                              widget.storageService
+                                                  .getDonationButtonColor(
+                                                    false,
+                                                  ),
+                                            ),
+                                            customColor: Color(
+                                              widget.storageService
+                                                  .getDonationButtonColor(true),
+                                            ),
+                                            onAmountSelected:
+                                                _isStripe || _isMockMode
+                                                ? _initiateTerminalTransaction
+                                                : _initiateSumupTransaction,
                                           ),
-                                          customColor: Color(
-                                            widget.storageService
-                                                .getDonationButtonColor(true),
-                                          ),
-                                          onAmountSelected:
-                                              _isStripe || _isMockMode
-                                              ? _initiateTerminalTransaction
-                                              : _initiateSumupTransaction,
                                         ),
                                       ),
                                     );

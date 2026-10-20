@@ -39,7 +39,7 @@ jobs:
       - name: Tests Flutter
         run: |
           flutter pub get
-          flutter test test/donation_front_test.dart test/logo_service_test.dart
+          flutter test
       - name: Compilation Flutter
         run: flutter build ${{ matrix.target }} --release
       - name: Préparer le détourage
