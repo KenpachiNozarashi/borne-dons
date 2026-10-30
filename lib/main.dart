@@ -7,6 +7,8 @@
 /// 3. Evaluates if the POS is ready for transactions (has keys & reader credentials)
 /// 4. Boots either the Setup Screen or Checkout Payment Screen based on setup status.
 import 'dart:async';
+import 'services/tls_diagnostic_stub.dart'
+    if (dart.library.io) 'services/tls_diagnostic_io.dart';
 import 'package:flutter/material.dart';
 import 'services/logo_runtime.dart';
 import 'core/theme.dart';
@@ -15,9 +17,13 @@ import 'services/sumup_service.dart';
 import 'features/setup/setup_screen.dart';
 import 'features/payment/payment_screen.dart';
 
-void main() async {
+void main(List<String> arguments) async {
   // Ensure that Flutter widget interactions are fully bound and ready before async loading
   WidgetsFlutterBinding.ensureInitialized();
+  if (arguments.contains('--tls-diagnostic')) {
+    await runTlsDiagnostic();
+    return;
+  }
   unawaited(startLocalLogoService());
 
   StorageService? storage;

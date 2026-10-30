@@ -4,10 +4,19 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 import 'storage_service.dart';
+import 'sumup_http_client.dart';
+
+class SumupSetupException implements Exception {
+  final String message;
+  const SumupSetupException(this.message);
+  @override
+  String toString() => message;
+}
 
 class SumupService {
   final http.Client _client;
   final Duration requestTimeout;
+  final Duration pairingTimeout;
   final Duration pollingInterval;
   final Duration paymentWindow;
   final Duration activationWait;
@@ -21,13 +30,14 @@ class SumupService {
   SumupService({
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 4),
+    this.pairingTimeout = const Duration(seconds: 15),
     this.pollingInterval = const Duration(seconds: 2),
     this.paymentWindow = const Duration(seconds: 90),
     this.activationWait = const Duration(seconds: 60),
     this.cancellationWait = const Duration(seconds: 15),
     this.authorizationWait = const Duration(seconds: 30),
     Stopwatch? clock,
-  }) : _client = client ?? http.Client(),
+  }) : _client = client ?? createSumupHttpClient(),
        _clock = clock ?? Stopwatch();
 
   Future<String?> pairSumupSolo(
@@ -37,24 +47,51 @@ class SumupService {
   ) async {
     final url = Uri.parse('${AppConstants.sumupBaseUrl}/$merchantCode/readers');
 
-    final response = await _client.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $apiKey',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'pairing_code': pairingCode,
-        'name': 'testPairingReader',
-      }),
-    );
-
-    if (response.statusCode == 201) {
+    try {
+      final response = await _request(
+        'POST',
+        url,
+        apiKey,
+        timeout: pairingTimeout,
+        body: {'pairing_code': pairingCode, 'name': 'Borne de dons'},
+      );
+      if (response.statusCode != 201) {
+        final message = switch (response.statusCode) {
+          401 => 'Clé API SumUp refusée. Vérifiez la clé et le compte utilisé.',
+          403 =>
+            'Accès SumUp refusé. Vérifiez les droits de la clé et le compte marchand.',
+          400 || 404 || 409 || 422 =>
+            'Association du terminal refusée. Vérifiez le compte marchand et générez un nouveau code de jumelage sur le Solo.',
+          429 => 'Trop de tentatives. Patientez avant de réessayer.',
+          _ =>
+            'SumUp est indisponible (HTTP ${response.statusCode}). Réessayez plus tard.',
+        };
+        throw SumupSetupException(message);
+      }
       final data = jsonDecode(response.body);
-      return data['id'];
-    } else {
-      throw Exception(
-        'Impossible d\'enregistrer le terminal: ${response.body}',
+      final id = data is Map ? data['id'] : null;
+      if (id is! String || id.trim().isEmpty) {
+        throw const SumupSetupException(
+          'Réponse SumUp incomplète : identifiant du terminal absent.',
+        );
+      }
+      return id;
+    } on SumupSetupException {
+      rethrow;
+    } on TimeoutException {
+      throw const SumupSetupException(
+        'SumUp ne répond pas après 15 secondes. L’association peut avoir été reçue : vérifiez le Solo avant de générer un nouveau code.',
+      );
+    } on http.ClientException catch (e) {
+      final tls = e.message.toLowerCase();
+      throw SumupSetupException(
+        tls.contains('certificat') || tls.contains('certificate')
+            ? 'Connexion sécurisée à SumUp refusée. Vérifiez la date et les certificats Windows, ou transmettez le diagnostic au responsable.'
+            : 'Connexion à SumUp impossible. Vérifiez Internet et réessayez.',
+      );
+    } catch (_) {
+      throw const SumupSetupException(
+        'Impossible de terminer l’association SumUp. Vérifiez la connexion et le terminal.',
       );
     }
   }
@@ -98,6 +135,7 @@ class SumupService {
     Uri uri,
     String key, {
     Map<String, dynamic>? body,
+    Duration? timeout,
   }) async {
     final abort = Completer<void>();
     final request = http.AbortableRequest(
@@ -115,7 +153,7 @@ class SumupService {
           .send(request)
           .then(http.Response.fromStream)
           .timeout(
-            requestTimeout,
+            timeout ?? requestTimeout,
             onTimeout: () {
               if (!abort.isCompleted) abort.complete();
               throw TimeoutException('SumUp request timeout');

@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'lib/**'
+      - 'test/**'
+      - 'tool/**'
       - 'assets/**'
       - 'pubspec.*'
       - 'logo_service/**'
@@ -36,12 +38,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Rust pour le client TLS natif
+        run: rustup update stable --no-self-update
       - name: Tests Flutter
         run: |
           flutter pub get
           flutter test
       - name: Compilation Flutter
         run: flutter build ${{ matrix.target }} --release
+      - name: Vérifier TLS Windows sans identifiants
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $release = Join-Path $pwd 'build/windows/x64/runner/Release'
+          & 'C:/Program Files/Git/usr/bin/openssl.exe' req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost' -keyout tls-fixture-key.pem -out tls-fixture-cert.pem
+          if ($LASTEXITCODE -ne 0) { throw 'TLS fixture certificate generation failed' }
+          $server = Start-Process python -ArgumentList 'tool/tls_fixture.py' -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            $probe = Start-Process (Join-Path $release 'borne_dons.exe') -ArgumentList '--tls-diagnostic' -WorkingDirectory $release -PassThru
+            if (-not $probe.WaitForExit(90000)) { $probe.Kill(); throw 'TLS probe timeout' }
+            Get-Content (Join-Path $release 'tls-diagnostic.txt')
+            if ($probe.ExitCode -ne 0) { throw 'Windows TLS verification failed' }
+          } finally { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: diagnostic-tls-windows
+          path: build/windows/x64/runner/Release/tls-diagnostic.txt
+          if-no-files-found: warn
       - name: Préparer le détourage
         env:
           U2NET_HOME: ${{ github.workspace }}/logo_service/models
