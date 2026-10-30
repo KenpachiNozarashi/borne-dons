@@ -777,6 +777,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
   /// Persists credentials and transitions state safely.
   Future<void> _handleSubmit() async {
+    if (_isLoading) return;
     // If mock mode is selected, we bypass strict field validation
     if (!_isMockMode && !_formKey.currentState!.validate()) {
       return;
@@ -845,25 +846,24 @@ class _SetupScreenState extends State<SetupScreen> {
           );
         } else {
           final pairingCode = await widget.storageService.getSumupPairingCode();
-          //sumup
-          if (_sumupPairingCodeController.text.trim() !=
-              pairingCode.toString()) {
-            try {
-              final String? readerId = await widget.sumupService.pairSumupSolo(
-                _sumupMerchantCodeController.text.trim(),
-                _sumupApiKeyController.text.trim(),
-                _sumupPairingCodeController.text.trim(),
-              );
+          final reader = await widget.storageService.getSumupReaderId();
+          final merchant = await widget.storageService.getSumupMerchantCode();
+          // An unchanged one-time code alone does not prove a saved reader exists.
+          if (reader == null ||
+              reader.isEmpty ||
+              merchant != _sumupMerchantCodeController.text.trim() ||
+              _sumupPairingCodeController.text.trim() != pairingCode) {
+            final String? readerId = await widget.sumupService.pairSumupSolo(
+              _sumupMerchantCodeController.text.trim(),
+              _sumupApiKeyController.text.trim(),
+              _sumupPairingCodeController.text.trim(),
+            );
 
-              if (readerId == null) {
-                throw Exception('Impossible de coupler le terminal...');
-              }
-
-              await widget.storageService.setSumupReaderId(readerId);
-            } catch (e) {
-              print('error while pairing sumup: $e');
-              return;
+            if (readerId == null) {
+              throw Exception('Impossible de coupler le terminal...');
             }
+
+            await widget.storageService.setSumupReaderId(readerId);
           }
 
           await widget.storageService.setSumupApiKey(
@@ -910,7 +910,12 @@ class _SetupScreenState extends State<SetupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppConstants.error,
-            content: Text('Impossible d\'enregistrer les paramètres: $e'),
+            content: Text(
+              e is SumupSetupException
+                  ? e.message
+                  : 'Impossible d’enregistrer les paramètres. Vérifiez le stockage local et réessayez.',
+            ),
+            duration: const Duration(seconds: 12),
           ),
         );
       }

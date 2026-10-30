@@ -56,6 +56,25 @@ class StorageService {
     return StorageService(secureStorage: secureStorage, prefs: prefs);
   }
 
+  // Diagnostic events only: no pending-payment recovery or startup lock.
+  List<String> getSumupPaymentJournal() =>
+      _prefs.getStringList('sumup_payment_journal') ?? [];
+
+  Future<void> logSumupPayment(String event, String? operationId) async {
+    final entries = [
+      ...getSumupPaymentJournal(),
+      jsonEncode({
+        'time': DateTime.now().toUtc().toIso8601String(),
+        'event': event,
+        'operation_id': operationId,
+      }),
+    ];
+    await _prefs.setStringList(
+      'sumup_payment_journal',
+      entries.length > 100 ? entries.sublist(entries.length - 100) : entries,
+    );
+  }
+
   // --- Sumup Credentials Handling ---
   /// Reads the stored Sumup Merchant Code securely.
   Future<String?> getSumupMerchantCode() async {

@@ -7,43 +7,52 @@
 /// 3. Evaluates if the POS is ready for transactions (has keys & reader credentials)
 /// 4. Boots either the Setup Screen or Checkout Payment Screen based on setup status.
 import 'dart:async';
+import 'services/tls_diagnostic_stub.dart'
+    if (dart.library.io) 'services/tls_diagnostic_io.dart';
 import 'package:flutter/material.dart';
 import 'services/logo_runtime.dart';
-import 'core/constants.dart';
 import 'core/theme.dart';
 import 'services/storage_service.dart';
 import 'services/sumup_service.dart';
 import 'features/setup/setup_screen.dart';
 import 'features/payment/payment_screen.dart';
 
-void main() async {
+void main(List<String> arguments) async {
   // Ensure that Flutter widget interactions are fully bound and ready before async loading
   WidgetsFlutterBinding.ensureInitialized();
+  if (arguments.contains('--tls-diagnostic')) {
+    await runTlsDiagnostic();
+    return;
+  }
   unawaited(startLocalLogoService());
 
   StorageService? storage;
-  SumupService sumupService = new SumupService();
+  SumupService sumupService = SumupService();
   bool isTerminalConfigured = false;
 
   try {
     // Asynchronously resolve local disk storage services (prefs + secure keys)
     storage = await StorageService.initialize();
-    
+
     // Check if the business has already saved Stripe keys and reader bindings
     isTerminalConfigured = await storage.isConfigured();
   } catch (e) {
-    debugPrint('Bootstrapper Error: Failed to resolve local storage drivers. $e');
+    debugPrint(
+      'Bootstrapper Error: Failed to resolve local storage drivers. $e',
+    );
   }
 
   // Run application with custom, Shadcn-style minimalist theme settings
-  runApp(StripePOSApp(
-    storageService: storage,
-    initialScreen: storage == null
-        ? const SizedBox.shrink()
-        : isTerminalConfigured
-        ? PaymentScreen(storageService: storage!, sumupService: sumupService)
-        : SetupScreen(storageService: storage!, sumupService: sumupService),
-  ));
+  runApp(
+    StripePOSApp(
+      storageService: storage,
+      initialScreen: storage == null
+          ? const SizedBox.shrink()
+          : isTerminalConfigured
+          ? PaymentScreen(storageService: storage, sumupService: sumupService)
+          : SetupScreen(storageService: storage, sumupService: sumupService),
+    ),
+  );
 }
 
 class StripePOSApp extends StatelessWidget {
@@ -61,10 +70,10 @@ class StripePOSApp extends StatelessWidget {
     return MaterialApp(
       title: 'Borne de dons',
       debugShowCheckedModeBanner: false,
-      
+
       // Apply professional Shadcn visual theme custom specs
       theme: AppTheme.lightTheme,
-      
+
       // Fallback screen in case storage initialization crashed
       home: storageService == null
           ? const Scaffold(
@@ -73,7 +82,10 @@ class StripePOSApp extends StatelessWidget {
                   padding: EdgeInsets.all(24.0),
                   child: Text(
                     'Fatal Initialization Error.\nFailed to mount local secure key storage driver.\nPlease restart or verify platform permissions.',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
